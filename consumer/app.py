@@ -17,6 +17,7 @@ from consumer import geoip
 from consumer.dialogue import DialogueManager
 from consumer.recipes import RecipePlan
 from shared import store
+from shared.decision_ledger import refresh_needed
 
 WEB = Path(__file__).parent / "web"
 app = FastAPI(title="commerce_ai — 대화형 추천", version="1.0")
@@ -85,19 +86,16 @@ def health():
 
 @app.get("/api/decision/ledger/{sid}")
 def decision_ledger(sid: str):
-    """세션의 Decision Freshness Ledger 조회 (shadow)."""
+    """세션의 Decision Freshness Ledger 조회 (shadow).
+
+    현재 세션의 last_items 와 스냅샷을 비교해 결제 직전 재검토 필요 여부를 함께 돌려준다.
+    """
     s = dm.sessions.get(sid)
     if not s or not s.ledger:
-        return {"session_id": sid, "ledger": None}
-    e = s.ledger
-    return {"session_id": sid, "ledger": {
-        "decision_time": e.decision_time.isoformat(),
-        "evidence_time": e.evidence_time.isoformat(),
-        "intended_action_time": e.intended_action_time.isoformat(),
-        "revision_deadline": e.revision_deadline.isoformat(),
-        "watch_conditions": e.watch_conditions,
-        "snapshot_keys": list(e.snapshot.keys()),
-    }}
+        return {"session_id": sid, "ledger": None, "refresh_needed": False}
+    rn = refresh_needed(s.ledger, [x.offer for x in s.last_items])
+    return {"session_id": sid, "ledger": s.ledger.to_dict(), "refresh_needed": rn["needed"],
+            "expired": rn["expired"], "changed": rn["changed"]}
 
 
 @app.post("/api/recipe/plan")

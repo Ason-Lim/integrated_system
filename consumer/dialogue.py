@@ -151,13 +151,14 @@ class DialogueManager:
             try:
                 store.record_offers([x.offer for x in items])
                 store.log_search(s.id, query, intent, len(items), self.rec.last_engine)
+                store.record_ledger(s.id, s.ledger)
             except Exception:
                 pass
         s.stage = Stage.RECOMMEND
         s.last_items = items
         s.last_query = query
         blocks = presenter.recommendation_blocks(intent, items, active_malls=self.rec.markets.active,
-                                                 country_code=s.country_code)
+                                                 country_code=s.country_code, ledger=s.ledger)
         return self._reply(s, blocks, intent=intent)
 
     # ── EXPLORE: follow_up 칩에 대한 규칙 기반 즉시 응답 ─────────────
@@ -280,15 +281,7 @@ class DialogueManager:
         ])
 
     def _reply(self, s: Session, blocks: list[Block], intent: Intent | None = None) -> dict:
-        ledger = None
-        if s.ledger:
-            ledger = {
-                "decision_time": s.ledger.decision_time.isoformat(),
-                "evidence_time": s.ledger.evidence_time.isoformat(),
-                "intended_action_time": s.ledger.intended_action_time.isoformat(),
-                "revision_deadline": s.ledger.revision_deadline.isoformat(),
-                "watch_conditions": s.ledger.watch_conditions,
-            }
+        ledger = s.ledger.to_dict() if s.ledger else None
         return {
             "session_id": s.id, "stage": s.stage.value, "slots": s.slots,
             "intent": intent.model_dump() if intent else None,

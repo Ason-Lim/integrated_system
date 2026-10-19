@@ -63,6 +63,20 @@ click_log = Table(
     Column("created_at", DateTime(timezone=True), default=now_utc),
 )
 
+# Decision Freshness Ledger (shadow) — 카드 단위 스냅샷
+decision_ledger = Table(
+    "decision_ledger", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("session_id", String(64), nullable=False),
+    Column("decision_time", DateTime(timezone=True), nullable=False),
+    Column("evidence_time", DateTime(timezone=True), nullable=False),
+    Column("intended_action_time", DateTime(timezone=True), nullable=False),
+    Column("revision_deadline", DateTime(timezone=True), nullable=False),
+    Column("watch_conditions", JSON),
+    Column("snapshot", JSON),
+    Column("created_at", DateTime(timezone=True), default=now_utc),
+)
+
 
 @lru_cache
 def engine(url: str | None = None):
@@ -96,6 +110,29 @@ def log_search(session_id: str, query: str, intent: Intent, count: int, engine_n
 def log_click(session_id: str, mall: str, pid: str, rank: int, score: float) -> None:
     with engine().begin() as c:
         c.execute(insert(click_log).values(session_id=session_id, mall=mall, mall_product_id=pid, rank=rank, score=score))
+
+
+def record_ledger(session_id: str, entry) -> None:
+    """Decision Freshness Ledger 엔트리를 저장한다 (shadow)."""
+    with engine().begin() as c:
+        c.execute(insert(decision_ledger).values(
+            session_id=session_id,
+            decision_time=entry.decision_time,
+            evidence_time=entry.evidence_time,
+            intended_action_time=entry.intended_action_time,
+            revision_deadline=entry.revision_deadline,
+            watch_conditions=list(entry.watch_conditions),
+            snapshot=json.loads(json.dumps(entry.snapshot, ensure_ascii=False, default=str)),
+        ))
+
+
+def latest_ledger(session_id: str) -> dict | None:
+    """세션의 가장 최근 ledger 스냅샷을 돌려준다."""
+    q = (select(decision_ledger).where(decision_ledger.c.session_id == session_id)
+         .order_by(decision_ledger.c.id.desc()).limit(1))
+    with engine().connect() as c:
+        row = c.execute(q).first()
+    return dict(row._mapping) if row else None
 
 
 def recent_observations(keyword: str, limit: int = 20, include_sample: bool = False) -> list[dict]:

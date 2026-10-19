@@ -47,3 +47,35 @@ def test_not_rankable_separated_from_ranking():
     suff = decision_sufficiency(o)
     assert suff["rankability"] != "DETERMINATE"
     assert "total_cost" in suff["missing"]
+
+
+def test_card_carries_ledger_fields():
+    r = c.post("/api/chat", json={"message": "두바이 쫀득쿠키 추천해줘"}).json()
+    cards = []
+    for b in r["blocks"]:
+        if b["type"] == "product_list":
+            cards.extend(b["data"]["items"])
+        elif b["type"] == "comparison_pair":
+            for p in b["data"]["pairs"]:
+                cards.extend(p["cards"])
+    assert cards
+    first = cards[0]
+    assert first["decision_time"] and first["evidence_time"] and first["revision_deadline"]
+    assert "price" in first["watch_conditions"]
+    assert first["refresh_needed"] is False
+
+
+def test_ledger_detects_price_change():
+    from datetime import timedelta
+    from shared.decision_ledger import open_entry, refresh_needed
+    from shared.models import Intent, Offer
+    o = Offer(mall="sample", title="사과", price=10000, shipping_fee=3000)
+    intent = Intent(action="recommend_food", slots={"product": "사과"})
+    entry = open_entry(intent, [o])
+    changed = o.model_copy(update={"price": 12000})
+    rn = refresh_needed(entry, [changed])
+    assert rn["needed"] is True
+    assert any(c["reason"] == "price_changed" for c in rn["changed"])
+    # 유효 기한 경과
+    rn2 = refresh_needed(entry, [o], now=entry.revision_deadline + timedelta(hours=1))
+    assert rn2["expired"] is True

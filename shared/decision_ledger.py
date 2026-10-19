@@ -23,6 +23,16 @@ class LedgerEntry:
     watch_conditions: list[str] = field(default_factory=list)
     snapshot: dict = field(default_factory=dict)
 
+    def to_dict(self) -> dict:
+        return {
+            "decision_time": self.decision_time.isoformat(),
+            "evidence_time": self.evidence_time.isoformat(),
+            "intended_action_time": self.intended_action_time.isoformat(),
+            "revision_deadline": self.revision_deadline.isoformat(),
+            "watch_conditions": list(self.watch_conditions),
+            "snapshot_keys": list(self.snapshot.keys()),
+        }
+
 
 def _snapshot(offer: Offer) -> dict:
     return {"price": offer.price, "shipping_fee": offer.shipping_fee,
@@ -49,10 +59,15 @@ def open_entry(intent: Intent, offers: list[Offer], *, action_delay: timedelta =
 
 def invalidated(entry: LedgerEntry, current: list[Offer], *, now: datetime | None = None) -> list[str]:
     """watch_conditions 중 실제로 바뀐 상품 키를 돌려준다. 빈 리스트면 유효."""
+    return [c["key"] for c in changes(entry, current, now=now)]
+
+
+def changes(entry: LedgerEntry, current: list[Offer], *, now: datetime | None = None) -> list[dict]:
+    """변경 사유까지 함께 돌려준다. 예: [{"key": "p1", "reason": "price_changed", "before": 1000, "after": 1200}]"""
     now = now or now_utc()
     if now > entry.intended_action_time:
-        return ["action_window_expired"]
-    changed: list[str] = []
+        return [{"key": "*", "reason": "action_window_expired", "before": None, "after": None}]
+    out: list[dict] = []
     for o in current:
         key = o.mall_product_id or o.title
         prev = entry.snapshot.get(key)
@@ -61,12 +76,28 @@ def invalidated(entry: LedgerEntry, current: list[Offer], *, now: datetime | Non
         cur = _snapshot(o)
         for cond in entry.watch_conditions:
             if cond == "price" and prev.get("price") != cur.get("price"):
-                changed.append(key)
+                out.append({"key": key, "reason": "price_changed",
+                            "before": prev.get("price"), "after": cur.get("price")})
                 break
             if cond == "shipping_fee" and prev.get("shipping_fee") != cur.get("shipping_fee"):
-                changed.append(key)
+                out.append({"key": key, "reason": "shipping_fee_changed",
+                            "before": prev.get("shipping_fee"), "after": cur.get("shipping_fee")})
                 break
             if cond == "delivery_date" and prev.get("service_date") != cur.get("service_date"):
-                changed.append(key)
+                out.append({"key": key, "reason": "delivery_date_changed",
+                            "before": prev.get("service_date"), "after": cur.get("service_date")})
                 break
-    return changed
+    return out
+
+
+def refresh_needed(entry: LedgerEntry, current: list[Offer], *, now: datetime | None = None) -> dict:
+    """결제 직전 재검토가 필요한지 판단한다. 카드/알림에 그대로 실어 보낼 수 있는 dict."""
+    now = now or now_utc()
+    ch = changes(entry, current, now=now)
+    expired = now > entry.revision_deadline
+    return {
+        "needed": bool(ch) or expired,
+        "expired": expired,
+        "changed": ch,
+        "revision_deadline": entry.revision_deadline.isoformat(),
+    }

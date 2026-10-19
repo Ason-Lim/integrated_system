@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from shared.decision_ledger import LedgerEntry, refresh_needed
 from shared.logistics.shipping_agency import (
     AgencyUnavailable,
     ShippingRequest,
@@ -47,10 +48,23 @@ def ago(dt: datetime) -> tuple[str, bool]:
     return f"{int(h // 24)}일 전 조회", stale
 
 
-def card(so: ScoredOffer, rank: int) -> dict:
+def card(so: ScoredOffer, rank: int, ledger: LedgerEntry | None = None) -> dict:
     o = so.offer
     when, stale = ago(o.observed_at)
     mall = o.mall_label or MALL_LABELS.get(o.mall, o.mall)
+    # Decision Freshness Ledger (shadow) — 카드 단위로 유효성 정보를 실어 보낸다.
+    ledger_fields: dict = {}
+    if ledger is not None:
+        rn = refresh_needed(ledger, [o])
+        ledger_fields = {
+            "decision_time": ledger.decision_time.isoformat(),
+            "evidence_time": ledger.evidence_time.isoformat(),
+            "revision_deadline": ledger.revision_deadline.isoformat(),
+            "watch_conditions": list(ledger.watch_conditions),
+            "stale_decision": rn["expired"],
+            "refresh_needed": rn["needed"],
+            "refresh_reasons": rn["changed"],
+        }
     return {
         "decision": so.decision, "score_source": so.score_source, "rank": rank, "mall": o.mall, "pid": o.mall_product_id, "score": so.score,
         "badges": so.badges, "title": o.title, "image": o.image_url,
@@ -63,6 +77,7 @@ def card(so: ScoredOffer, rank: int) -> dict:
         "rankable": so.rankable, "not_rankable_reason": so.not_rankable_reason,
         "rankability": o.rankability, "evidence_coverage": o.evidence_coverage,
         "missing_terms": o.missing_terms,
+        **ledger_fields,
     }
 
 
@@ -89,7 +104,8 @@ def _reasoning(so: ScoredOffer) -> str:
     return "조건 적합도와 가격을 함께 고려했어요."
 
 
-def comparison_pair(items: list[ScoredOffer], start_rank: int = 1) -> list[dict]:
+def comparison_pair(items: list[ScoredOffer], start_rank: int = 1,
+                    ledger: LedgerEntry | None = None) -> list[dict]:
     """상품 리스트를 2개씩 묶어 비교 카드 쌍을 만든다.
 
     반환 구조 (각 원소가 하나의 comparison_pair 블록 data):
@@ -109,7 +125,7 @@ def comparison_pair(items: list[ScoredOffer], start_rank: int = 1) -> list[dict]
         chunk = items[i:i + 2]
         cards = []
         for j, so in enumerate(chunk):
-            c = card(so, start_rank + i + j)
+            c = card(so, start_rank + i + j, ledger=ledger)
             c["reasoning"] = _reasoning(so)
             c["follow_up"] = _follow_up_chips(so)
             cards.append(c)
@@ -223,7 +239,8 @@ def _shipping_options_block(items: list[ScoredOffer]) -> Block:
 
 
 def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls: list[str],
-                          country_code: str | None = None) -> list[Block]:
+                          country_code: str | None = None,
+                          ledger: LedgerEntry | None = None) -> list[Block]:
     s = intent.slots
     product = s.get("product", "")
     if not items:
@@ -249,16 +266,17 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     where = f"{mall}에서 살 수 있는 " if mall and not all_sample else ""
     head = f"{where}{' '.join(ctx) + ' ' if ctx else ''}**{product}** 중에는 이 {len(items)}가지를 추천해요."
 
-    cards = [card(x, i + 1) for i, x in enumerate(items)]
+    cards = [card(x, i + 1, ledger=ledger) for i, x in enumerate(items)]
     rankable_items = [x for x in items if x.rankable]
     not_rankable = [c for c in cards if not c["rankable"]]
     blocks = [text_block(head)]
     # 상품이 있으면 항상 product_list/comparison_pair 를 notice 보다 먼저 노출한다.
     if len(rankable_items) >= 2:
-        blocks.append(Block(type="comparison_pair", data={"pairs": comparison_pair(rankable_items)}))
+        blocks.append(Block(type="comparison_pair",
+                            data={"pairs": comparison_pair(rankable_items, ledger=ledger)}))
     elif rankable_items:
         blocks.append(Block(type="product_list",
-                            data={"items": [card(rankable_items[0], 1)], "compare": False}))
+                            data={"items": [card(rankable_items[0], 1, ledger=ledger)], "compare": False}))
     elif cards:
         blocks.append(Block(type="product_list", data={"items": cards, "compare": False}))
     if not_rankable:
@@ -274,6 +292,23 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     if any(c["is_sample"] for c in cards):
         note = "지금은 **예시 데이터**로 동작 중이에요 (마켓 API 키 미설정). " + note
     blocks.append(notice_block(note, "warn" if stale or any(c["is_sample"] for c in cards) else "info"))
+
+    # Decision Freshness Ledger: 결제 직전 재검토가 필요하면 알림을 띄운다.
+    if ledger is not None:
+        rn = refresh_needed(ledger, [x.offer for x in items])
+        if rn["needed"]:
+            reasons = {c["reason"] for c in rn["changed"]}
+            if "action_window_expired" in reasons or rn["expired"]:
+                msg = "추천 유효 기한이 지났어요. 결제 전에 가격·배송비를 다시 확인해 주세요."
+            elif "price_changed" in reasons:
+                msg = "추천 이후 **가격이 변경**됐어요. 결제 전에 최신 가격을 확인해 주세요."
+            elif "shipping_fee_changed" in reasons:
+                msg = "추천 이후 **배송비가 변경**됐어요. 실구매가를 다시 확인해 주세요."
+            elif "delivery_date_changed" in reasons:
+                msg = "추천 이후 **배송 예정일이 변경**됐어요. 받으실 날짜를 다시 확인해 주세요."
+            else:
+                msg = "추천 이후 상품 조건이 변경됐어요. 결제 전에 다시 확인해 주세요."
+            blocks.append(notice_block(msg, "warn"))
 
     top = rankable_items[0] if rankable_items else items[0]
     why = (f"{', '.join(top.evidence)}로 근거가 가장 탄탄하고 조건에도 잘 맞아요" if top.evidence
