@@ -253,11 +253,14 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     rankable_items = [x for x in items if x.rankable]
     not_rankable = [c for c in cards if not c["rankable"]]
     blocks = [text_block(head)]
+    # 상품이 있으면 항상 product_list/comparison_pair 를 notice 보다 먼저 노출한다.
     if len(rankable_items) >= 2:
         blocks.append(Block(type="comparison_pair", data={"pairs": comparison_pair(rankable_items)}))
     elif rankable_items:
         blocks.append(Block(type="product_list",
                             data={"items": [card(rankable_items[0], 1)], "compare": False}))
+    elif cards:
+        blocks.append(Block(type="product_list", data={"items": cards, "compare": False}))
     if not_rankable:
         blocks.append(notice_block(
             f"구매조건(총비용·반품·서비스일·옵션) 근거가 부족한 후보 {len(not_rankable)}개는 "

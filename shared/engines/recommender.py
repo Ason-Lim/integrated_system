@@ -86,8 +86,11 @@ def apply_budget(items: list[ScoredOffer], intent: Intent) -> list[ScoredOffer]:
     for so in items:
         p = so.offer.total_price
         if p is None:
-            # Retain as discovery only when the known subtotal does not exceed the cap.
-            if hi and so.offer.price > hi:
+            # 배송비 미확인 → 상품가로 상·하한을 보수적으로 검사한다.
+            base = so.offer.price
+            if hi and base > hi:
+                continue
+            if lo and base < lo:
                 continue
             so.unverified.append("배송비 포함 예산 충족 여부")
             out.append(so)

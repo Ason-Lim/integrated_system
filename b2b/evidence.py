@@ -221,7 +221,8 @@ def evaluate(c: Candidate, req: BidRequirement, today: date | None = None, max_a
     decision = "EXCLUDED" if any(x.status == "FAIL" for x in checks) else \
         "HOLD" if any(x.status == "UNKNOWN" for x in checks) else "ELIGIBLE"
     # Merchant Decision Sufficiency: 필수조건 근거 coverage 를 후보에 기록 (shadow)
-    required = ("category", "online_value", "spec", "quote", "delivery", "exchange", "stock")
+    # budget 은 상품비·포장·배송(shipping_cost)이 모두 확정되어야 PASS 가 된다.
+    required = ("category", "online_value", "spec", "quote", "budget", "delivery", "exchange", "stock")
     determinate = [x for x in checks if x.key in required and x.status == "PASS"]
     missing = [x.key for x in checks if x.key in required and x.status != "PASS"]
     c.evidence_coverage = round(len(determinate) / len(required), 3)
