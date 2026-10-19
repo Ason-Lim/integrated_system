@@ -5,22 +5,11 @@ sqlalchemy>=2.0
 requests>=2.31
 python-dotenv>=1.0
 python-multipart>=0.0.9
-fastapi>=0.110
-uvicorn>=0.27
-pydantic>=2.6
-sqlalchemy>=2.0
-requests>=2.31
-python-dotenv>=1.0
-python-multipart>=0.0.9
 python-docx>=1.1
 python-pptx>=1.0          # 제안서 PPTX 내보내기
 python-hwpx>=0.1          # 제안서 HWPX 내보내기 (한컴 오피스 불필요)
-openpyxl>=3.1           # 입찰 모니터 엑셀 내보내기
-# pypdf  — 선택: PDF 첨부 텍스트 추출
-httpx>=0.27          # 테스트용
+openpyxl>=3.1             # 입찰 모니터 엑셀 내보내기
+httpx>=0.27               # GeoIP 조회 / 결제·배송대행 API / 테스트
 pytest>=8
 # 선택: openai / anthropic (LLM_PROVIDER 에 따라), psycopg2-binary (Postgres)
 # pypdf  — 선택: PDF 첨부 텍스트 추출
-httpx>=0.27          # 테스트용
-pytest>=8
-# 선택: openai / anthropic (LLM_PROVIDER 에 따라), psycopg2-binary (Postgres)
