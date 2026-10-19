@@ -13,6 +13,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from shared.logistics.shipping_agency import (
+    AgencyUnavailable,
+    ShippingRequest,
+    total_landed_cost,
+)
 from shared.markets.base import MALL_LABELS
 from shared.models import Block, Intent, ScoredOffer, notice_block, text_block
 
@@ -155,18 +160,61 @@ def ask_product_blocks(intent: Intent) -> list[Block]:
     ]
 
 
+def _estimate_landed(so: ScoredOffer) -> dict | None:
+    """상품 1건의 최종 견적을 계산한다. 실패 시 None (예시 데이터를 실제 견적으로 섞지 않는다)."""
+    o = so.offer
+    price = o.price
+    if price is None:
+        return None
+    # Offer 가격은 KRW 기준. 배송대행지 API 는 USD 신고가를 요구하므로 환율로 역산한다.
+    fx = 1350.0
+    product_usd = price / fx
+    req = ShippingRequest(
+        origin_country="US",
+        dest_country="KR",
+        weight_kg=1.0,          # TODO: 상품 스펙에서 무게/부피를 얻을 수 있게 되면 대체
+        declared_value_usd=product_usd,
+    )
+    try:
+        lc = total_landed_cost(product_usd=product_usd, req=req)
+    except AgencyUnavailable:
+        return None
+    return {
+        "agency": lc.agency,
+        "shipping_krw": lc.shipping_krw,
+        "agency_fee_krw": lc.agency_fee_krw,
+        "duty_krw": lc.duty_krw,
+        "vat_krw": lc.vat_krw,
+        "total_krw": lc.total_krw,
+        "eta_days_min": lc.eta_days_min,
+        "eta_days_max": lc.eta_days_max,
+        "fx_krw_per_usd": lc.fx_krw_per_usd,
+        "notes": lc.notes,
+    }
+
+
 def _shipping_options_block(items: list[ScoredOffer]) -> Block:
-    """해외 사용자에게만 노출하는 배송 대행 옵션 안내."""
+    """해외 사용자에게만 노출하는 배송 대행 옵션 안내 + 예상 견적."""
     options = [
         {"id": "forwarder", "label": "배송 대행지 이용", "desc": "현지 주소로 받은 뒤 국제 배송으로 전달"},
         {"id": "direct", "label": "해외 직배송", "desc": "판매처가 해외로 직접 발송하는 경우"},
         {"id": "agent", "label": "구매 대행 서비스", "desc": "결제·통관을 대행해 주는 서비스"},
     ]
+    estimates = []
+    for so in items[:3]:
+        est = _estimate_landed(so)
+        entry = {"title": so.offer.title, "mall": so.offer.mall}
+        if est:
+            entry["estimate"] = est
+        estimates.append(entry)
+    note = "현재 위치가 한국이 아니에요. 아래 방법으로 받을 수 있어요."
+    if not any("estimate" in e for e in estimates):
+        note += " 배송대행지 API 키가 설정되지 않아 예상 견적은 표시할 수 없어요."
     return Block(type="shipping_options", data={
         "title": "해외 배송 옵션",
-        "note": "현재 위치가 한국이 아니에요. 아래 방법으로 받을 수 있어요.",
+        "note": note,
         "options": options,
-        "items": [{"title": x.offer.title, "mall": x.offer.mall} for x in items[:3]],
+        "items": estimates,
     })
 
 
