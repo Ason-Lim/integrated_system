@@ -40,6 +40,8 @@ class Session:
     recipe_title: str | None = None
     recipe_ingredients: list[dict] = field(default_factory=list)  # 누적 재료
     recipe_mode: bool = False
+    # GeoIP 로 판별한 클라이언트 국가 코드 (ISO 3166-1 alpha-2). 미확인 시 None.
+    country_code: str | None = None
 
 
 # 빠른 응답 칩 → 슬롯 변경 (서버가 해석, LLM 불필요)
@@ -96,9 +98,12 @@ class DialogueManager:
 
     # ── 입력 3종: 자유 문장 / 폼 응답 / 칩 ────────────────────────
     def handle(self, sid: str | None, message: str | None = None,
-               answers: dict | None = None, chip: str | None = None) -> dict:
+               answers: dict | None = None, chip: str | None = None,
+               country_code: str | None = None) -> dict:
         s = self.session(sid)
         s.turns += 1
+        if country_code:
+            s.country_code = country_code
 
         # follow_up 칩 → EXPLORE (LLM 호출 없이 규칙 기반 즉시 응답)
         explore_text = (message or chip or "").strip()
@@ -146,7 +151,8 @@ class DialogueManager:
         s.stage = Stage.RECOMMEND
         s.last_items = items
         s.last_query = query
-        blocks = presenter.recommendation_blocks(intent, items, active_malls=self.rec.markets.active)
+        blocks = presenter.recommendation_blocks(intent, items, active_malls=self.rec.markets.active,
+                                                 country_code=s.country_code)
         return self._reply(s, blocks, intent=intent)
 
     # ── EXPLORE: follow_up 칩에 대한 규칙 기반 즉시 응답 ─────────────

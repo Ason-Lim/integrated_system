@@ -8,10 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
+from consumer import geoip
 from consumer.dialogue import DialogueManager
 from consumer.recipes import RecipePlan
 from shared import store
@@ -19,6 +21,24 @@ from shared import store
 WEB = Path(__file__).parent / "web"
 app = FastAPI(title="commerce_ai — 대화형 추천", version="1.0")
 dm = DialogueManager()
+
+
+class GeoIPMiddleware(BaseHTTPMiddleware):
+    """요청마다 국가 코드를 조회해 request.state.country_code 에 저장한다.
+
+    세션 ID 헤더(x-session-id)가 이미 존재하면 해당 세션에도 국가 코드를 반영한다.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        code = geoip.lookup(dict(request.headers), request.client.host if request.client else None)
+        request.state.country_code = code
+        sid = request.headers.get("x-session-id")
+        if sid and sid in dm.sessions:
+            dm.sessions[sid].country_code = code
+        return await call_next(request)
+
+
+app.add_middleware(GeoIPMiddleware)
 
 
 class ChatIn(BaseModel):
@@ -34,8 +54,10 @@ def index():
 
 
 @app.post("/api/chat")
-def chat(body: ChatIn):
-    return dm.handle(body.session_id, message=body.message, answers=body.answers, chip=body.chip)
+def chat(body: ChatIn, request: Request):
+    code = getattr(request.state, "country_code", None)
+    return dm.handle(body.session_id, message=body.message, answers=body.answers, chip=body.chip,
+                     country_code=code)
 
 
 @app.get("/go/{sid}/{rank}")

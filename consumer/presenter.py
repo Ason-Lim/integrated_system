@@ -155,7 +155,23 @@ def ask_product_blocks(intent: Intent) -> list[Block]:
     ]
 
 
-def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls: list[str]) -> list[Block]:
+def _shipping_options_block(items: list[ScoredOffer]) -> Block:
+    """해외 사용자에게만 노출하는 배송 대행 옵션 안내."""
+    options = [
+        {"id": "forwarder", "label": "배송 대행지 이용", "desc": "현지 주소로 받은 뒤 국제 배송으로 전달"},
+        {"id": "direct", "label": "해외 직배송", "desc": "판매처가 해외로 직접 발송하는 경우"},
+        {"id": "agent", "label": "구매 대행 서비스", "desc": "결제·통관을 대행해 주는 서비스"},
+    ]
+    return Block(type="shipping_options", data={
+        "title": "해외 배송 옵션",
+        "note": "현재 위치가 한국이 아니에요. 아래 방법으로 받을 수 있어요.",
+        "options": options,
+        "items": [{"title": x.offer.title, "mall": x.offer.mall} for x in items[:3]],
+    })
+
+
+def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls: list[str],
+                          country_code: str | None = None) -> list[Block]:
     s = intent.slots
     product = s.get("product", "")
     if not items:
@@ -205,6 +221,10 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
         blocks.append(notice_block("현재는 탐색 후보입니다. 옵션·배송·반품·출처가 확인되기 전에는 최종 추천을 확정하지 않습니다.", "warn"))
     if any(x.offer.url for x in items):
         blocks.append(notice_block("일부 구매 링크에서 수수료가 발생할 수 있으며 무료 서비스 운영에 도움이 됩니다. 협력 여부는 일반 추천 순위에 반영하지 않습니다."))
+
+    # 해외 사용자(KR 이 아닌 국가 코드가 확인된 경우)에게만 배송 대행 옵션 노출
+    if country_code and country_code.upper() != "KR":
+        blocks.append(_shipping_options_block(items))
 
     form = _form(s, items)
     if form["questions"]:
