@@ -50,6 +50,8 @@ search_log = Table(
     Column("intended_action_time", DateTime(timezone=True)),
     Column("revision_deadline", DateTime(timezone=True)),
     Column("watch_conditions", JSON),
+    # SAFE-QE (shadow) — 미지원 확장어 지표
+    Column("unsupported_expansion", JSON),
 )
 
 click_log = Table(
@@ -104,7 +106,8 @@ def log_search(session_id: str, query: str, intent: Intent, count: int, engine_n
             slots=json.loads(json.dumps(intent.slots, ensure_ascii=False)), result_count=count, engine=engine_name,
             decision_time=intent.decision_time, evidence_time=intent.evidence_time,
             intended_action_time=intent.intended_action_time, revision_deadline=intent.revision_deadline,
-            watch_conditions=intent.watch_conditions or None))
+            watch_conditions=intent.watch_conditions or None,
+            unsupported_expansion=intent.slots.get("_expansion") or None))
 
 
 def log_click(session_id: str, mall: str, pid: str, rank: int, score: float) -> None:

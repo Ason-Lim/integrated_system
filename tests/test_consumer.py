@@ -65,6 +65,18 @@ def test_card_carries_ledger_fields():
     assert first["refresh_needed"] is False
 
 
+def test_safe_qe_drops_unsupported_expansion():
+    from shared.query_expansion import filter_expansion
+    # 상품 근거에 '홍로'가 없으면 확장어로 승격하지 않는다
+    r = filter_expansion("맛있는 사과", ["고당도", "홍로"], "사과 5kg 특등급")
+    assert "홍로" in r["dropped"]
+    assert r["unsupported_rate"] > 0
+    assert any(c["attribute"] == "cultivar" for c in r["attribute_conflicts"])
+    # 근거에 있으면 유지
+    r2 = filter_expansion("맛있는 사과", ["홍로"], "홍로 사과 5kg")
+    assert r2["kept"] == ["홍로"] and not r2["dropped"]
+
+
 def test_ledger_detects_price_change():
     from datetime import timedelta
     from shared.decision_ledger import open_entry, refresh_needed

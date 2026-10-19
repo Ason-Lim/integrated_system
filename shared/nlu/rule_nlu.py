@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 
 from shared.models import Intent
-from shared.query_expansion import filter_expansion
+from shared.query_expansion import filter_expansion, log_unsupported
 
 MALLS = {
     "coupang": ["쿠팡"], "naver": ["네이버", "스마트스토어"], "emart": ["이마트"],
@@ -176,8 +176,11 @@ def parse(text: str) -> Intent:
         terms = "캠핑 " + terms
     if terms:
         slots["product"] = terms
-        # SAFE-QE: 원문에 없는 속성 확장은 요구로 승격하지 않는다 (shadow 지표만 기록)
-        slots["_expansion"] = filter_expansion(text, terms.split(), text)
+        # SAFE-QE: 규칙 NLU 는 상품 근거를 모르므로 확장어를 요구로 승격하지 않는다.
+        # (evidence="" → 모든 확장어가 dropped, 원문 단어만 유지)
+        exp = filter_expansion(text, terms.split(), "")
+        slots["_expansion"] = exp
+        log_unsupported(text, exp, source="rule_nlu")
 
     # ACTION — food-nlu 시스템 프롬프트의 우선순위 그대로
     if mall:

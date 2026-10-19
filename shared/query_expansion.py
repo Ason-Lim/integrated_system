@@ -5,7 +5,10 @@ LLM 이 만든 확장어 중 상품 근거(제목·스펙·설명)에 없는 속
 """
 from __future__ import annotations
 
+import logging
 import re
+
+log = logging.getLogger(__name__)
 
 # 상품 근거에 없으면 요구로 승격하면 안 되는 속성 유형
 ATTRIBUTE_PATTERNS = {
@@ -18,11 +21,17 @@ ATTRIBUTE_PATTERNS = {
 
 
 def _supported(term: str, evidence: str) -> bool:
-    return term in evidence
+    """확장어가 상품 근거(제목·스펙·설명)에 실제로 등장하는지 확인한다."""
+    if not evidence:
+        return False
+    return term.lower() in evidence.lower()
 
 
 def filter_expansion(original: str, expanded: list[str], evidence: str) -> dict:
     """확장어를 근거 지원 여부로 분류한다.
+
+    evidence 는 상품 근거(제목·스펙·설명)여야 한다. 원문 질의를 넘기면 모든 확장어가
+    '미지원'으로 처리되어 확장이 무력화된다 (SAFE-QE 의 의도된 동작).
 
     반환: {"kept": [...], "dropped": [...], "unsupported_rate": float, "attribute_conflicts": [...]}
     """
@@ -32,7 +41,7 @@ def filter_expansion(original: str, expanded: list[str], evidence: str) -> dict:
         t = term.strip()
         if not t or t in original:
             continue
-        if _supported(t.lower(), ev):
+        if _supported(t, ev):
             kept.append(t)
             continue
         dropped.append(t)
@@ -43,3 +52,12 @@ def filter_expansion(original: str, expanded: list[str], evidence: str) -> dict:
     total = len(kept) + len(dropped)
     rate = round(len(dropped) / total, 3) if total else 0.0
     return {"kept": kept, "dropped": dropped, "unsupported_rate": rate, "attribute_conflicts": conflicts}
+
+
+def log_unsupported(original: str, result: dict, *, source: str = "nlu") -> None:
+    """미지원 확장어를 로그로 남긴다 (shadow 지표)."""
+    if not result.get("dropped"):
+        return
+    log.info("unsupported_expansion source=%s original=%r dropped=%s rate=%s conflicts=%s",
+             source, original, result["dropped"], result["unsupported_rate"],
+             result.get("attribute_conflicts", []))

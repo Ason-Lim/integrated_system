@@ -15,7 +15,7 @@ import sys
 from shared.config import Settings, get_settings
 from shared.models import Intent
 from shared.nlu import rule_nlu
-from shared.query_expansion import filter_expansion
+from shared.query_expansion import filter_expansion, log_unsupported
 
 log = logging.getLogger(__name__)
 
@@ -50,10 +50,13 @@ class NLUService:
                     for k in RULE_AUTHORITATIVE:
                         if k in rule.slots:
                             slots[k] = rule.slots[k]
-                    # SAFE-QE: LLM 확장어 중 원문 근거 없는 속성은 요구로 승격하지 않는다
+                    # SAFE-QE: LLM 확장어 중 상품 근거에 없는 속성은 요구로 승격하지 않는다.
+                    # evidence 는 원문이 아니라 상품 근거(제목·스펙·설명)여야 한다.
                     if slots.get("product"):
-                        exp = filter_expansion(text, str(slots["product"]).split(), text)
+                        evidence = str(slots.get("_evidence") or "")
+                        exp = filter_expansion(text, str(slots["product"]).split(), evidence)
                         slots["_expansion"] = exp
+                        log_unsupported(text, exp, source="food_nlu")
                         if exp["dropped"]:
                             slots["product"] = " ".join([str(slots["product"])] + exp["kept"]).strip()
                     intent = Intent(action=r["action_intent"], context=r.get("context_intent") or rule.context,

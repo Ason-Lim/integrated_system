@@ -10,6 +10,7 @@ from shared.engines.commerce_ai_adapter import CommerceAIEngine
 from shared.markets.registry import MarketRegistry
 from shared.models import Intent, ScoredOffer
 from shared.assurance import assess
+from shared.query_expansion import filter_expansion, log_unsupported
 
 PURPOSE_KR = {"gift": "선물세트", "camping": "캠핑용"}
 
@@ -52,6 +53,16 @@ class Recommender:
             malls = [intent.slots["mall"]] if intent.slots.get("mall") else None
             offers = self.markets.search(query, malls=malls, limit=30)
             ranked = simple_ranker.rank(offers, intent, query)
+        # SAFE-QE: 검색 결과의 상품 근거(제목·스펙·설명)로 확장어를 재검증한다.
+        # 근거에 없는 확장어는 요구로 승격하지 않고 로그로만 남긴다.
+        if intent.slots.get("_expansion") and ranked:
+            evidence = " ".join(
+                " ".join(filter(None, (x.offer.title, x.offer.spec, x.offer.description)))
+                for x in ranked[:20]
+            )
+            exp = filter_expansion(query, list(intent.slots["_expansion"].get("kept", [])), evidence)
+            intent.slots["_expansion"] = exp
+            log_unsupported(query, exp, source="recommender")
         ranked = apply_budget(ranked, intent)
         if intent.slots.get("priority") == "trust":      # '후기 많은 순'
             ranked.sort(key=lambda x: -(x.offer.review_count or 0))
