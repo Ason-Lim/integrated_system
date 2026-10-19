@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>장보기 도우미</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+:root{
+  --paper:#f7f6f2; --surface:#ffffff; --ink:#17181c; --ink-2:#4a4d55; --ink-3:#8a8d95;
+  --line:#e6e4dd; --chip:#f0efea; --accent:#1f6f43; --accent-soft:#e3f2e8;
+  --warn:#8a5a00; --warn-soft:#fff4dc; --sale:#c2410c; --focus:#2563eb;
+  --radius:18px; --shadow:0 1px 2px rgba(0,0,0,.04),0 6px 24px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#121316; --surface:#1b1d21; --ink:#f2f2f0; --ink-2:#c3c5cb; --ink-3:#8b8f98;
+    --line:#2b2e34; --chip:#24272c; --accent:#5fd18f; --accent-soft:#183326;
+    --warn:#f5c56b; --warn-soft:#2e2611; --sale:#fb923c; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#121316; --surface:#1b1d21; --ink:#f2f2f0; --ink-2:#c3c5cb; --ink-3:#8b8f98;
+  --line:#2b2e34; --chip:#24272c; --accent:#5fd18f; --accent-soft:#183326;
+  --warn:#f5c56b; --warn-soft:#2e2611; --sale:#fb923c; --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink);font-family:"Pretendard Variable",Pretendard,system-ui,sans-serif;
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.bar{max-width:760px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:10px}
+.logo{font-weight:800;letter-spacing:-.02em;white-space:nowrap}
+.logo span{color:var(--accent)}
+.mode{margin-left:auto;font-size:12px;color:var(--ink-3)}
+.iconbtn{white-space:nowrap;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+main{max-width:760px;margin:0 auto;padding:16px 16px 180px}
+.turn-user{display:flex;justify-content:flex-end;margin:22px 0 10px}
+.turn-user div{background:var(--chip);padding:10px 16px;border-radius:20px 20px 6px 20px;max-width:80%}
+.turn-bot{margin:8px 0 26px}
+.txt{margin:6px 0 14px;font-size:17px}
+.txt b{font-weight:750}
+/* empty state */
+.hero{padding:48px 4px 8px}
+.hero h1{font-size:28px;line-height:1.3;letter-spacing:-.03em;margin:0 0 10px}
+.hero p{color:var(--ink-2);margin:0 0 20px}
+/* product card */
+.plist{display:flex;flex-direction:column;gap:12px}
+.card{display:grid;grid-template-columns:112px 1fr;gap:16px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);position:relative}
+.thumb{width:112px;height:112px;border-radius:14px;background:var(--chip);overflow:hidden;display:grid;place-items:center;
+  font-size:28px;font-weight:800;color:var(--ink-3)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+.badge{font-size:12px;font-weight:650;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.badge.sale{background:transparent;border:1px solid currentColor;color:var(--sale)}
+.title{font-weight:720;font-size:17px;line-height:1.4;margin:2px 0 6px;letter-spacing:-.01em;padding-right:34px}
+.price{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.price .total{font-size:21px;font-weight:800;letter-spacing:-.02em}
+.price .lbl{font-size:12px;color:var(--ink-3)}
+.price .orig{font-size:13px;color:var(--ink-3);text-decoration:line-through}
+.breakdown{font-size:13px;color:var(--ink-2)}
+.breakdown .unk{color:var(--warn);font-weight:600}
+.spec{font-size:14px;color:var(--ink-2);margin-top:4px}
+.reason{font-size:14.5px;color:var(--ink-2);margin:6px 0 8px}
+.ev{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.ev span{font-size:12px;padding:2px 8px;border-radius:8px;background:var(--chip);color:var(--ink-2)}
+.ev span.no{background:var(--warn-soft);color:var(--warn)}
+.meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+.src{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border-radius:999px;padding:3px 10px;color:var(--ink-2)}
+.src i{width:8px;height:8px;border-radius:50%;background:#e4312b;display:inline-block}
+.src i.naver{background:#03c75a}.src i.sample{background:var(--ink-3)}
+.when{color:var(--ink-3)}.when.stale{color:var(--warn);font-weight:600}
+.cta{margin-left:auto;font-weight:650;color:var(--ink);text-decoration:none;border-bottom:1.5px dotted var(--ink-3)}
+.cta.off{color:var(--ink-3);pointer-events:none;border:0;font-weight:500}
+.cmp{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:9px;border:1.5px solid var(--line);
+  background:var(--surface);cursor:pointer;display:grid;place-items:center;font-size:13px;color:var(--ink-3)}
+.cmp[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.notice{font-size:13px;color:var(--ink-3);margin:12px 2px}
+.notice.warn{color:var(--warn)}
+.verdict{font-size:17px;margin:16px 0}
+/* clarify form */
+.form{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 14px;margin:14px 0}
+.q{margin-bottom:12px}
+.q h4{margin:0 0 8px;font-size:15px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{border:1.5px solid var(--line);border-radius:999px;padding:7px 14px;background:transparent;cursor:pointer;font-size:15px}
+.opt[aria-checked="true"]{border-color:var(--ink);background:var(--ink);color:var(--surface)}
+.submit{width:100%;margin-top:6px;border:0;border-radius:999px;background:var(--ink);color:var(--surface);padding:14px;
+  font-weight:700;cursor:pointer;font-size:16px}
+.submit:disabled{opacity:.35;cursor:default}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;cursor:pointer;font-size:14px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* composer */
+.composer{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(14px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top,var(--paper) 70%,transparent)}
+.composer form{max-width:760px;margin:0 auto;display:flex;gap:8px;background:var(--surface);border:1px solid var(--line);
+  border-radius:999px;padding:6px 6px 6px 18px;box-shadow:var(--shadow)}
+.composer input{flex:1;border:0;background:transparent;outline:none;min-width:0}
+.send{border:0;border-radius:999px;background:var(--ink);color:var(--surface);width:44px;height:44px;cursor:pointer;font-size:18px}
+/* compare tray */
+.tray{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:6;display:none;align-items:center;gap:10px;
+  background:var(--ink);color:var(--surface);border-radius:999px;padding:8px 8px 8px 18px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+.tray.on{display:flex}
+.tray button{border:0;border-radius:999px;padding:8px 14px;background:var(--surface);color:var(--ink);font-weight:700;cursor:pointer}
+dialog{border:0;border-radius:22px;padding:0;max-width:min(720px,calc(100vw - 32px));width:100%;background:var(--surface);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+.sheet{padding:20px}
+.sheet h3{margin:0 0 12px}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+.tbl th{color:var(--ink-3);font-weight:600;width:96px}
+.tbl td.best{color:var(--accent);font-weight:700}
+.tblwrap{overflow-x:auto}
+.typing{display:inline-flex;gap:4px;padding:8px 0}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--ink-3);animation:b 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@media (max-width:520px){
+  .card{grid-template-columns:84px 1fr;gap:12px;padding:12px}
+  .thumb{width:84px;height:84px;font-size:22px}
+  .title{font-size:16px}.price .total{font-size:19px}
+  .hero h1{font-size:24px}
+  .mode{visibility:hidden}
+}
+@media (prefers-reduced-motion: reduce){.typing i{animation:none}}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="logo">장보기 <span>도우미</span></div>
+  <div class="mode" id="mode"></div>
+  <button class="iconbtn" id="reset" type="button">새 대화</button>
+</div></header>
+
+<main id="log" aria-live="polite">
+  <section class="hero" id="hero">
+    <h1>무엇을 찾고 계세요?<br>먼저 골라 드리고, 조건은 대화로 맞춰요.</h1>
+    <p>상품명만 말해도 바로 추천해요. 예산·구매처·받는 사람은 추천을 본 뒤에 고르면 돼요.</p>
+    <div class="chips" id="starter"></div>
+  </section>
+</main>
+
+<div class="tray" id="tray" role="region" aria-label="비교함"><span id="trayTxt"></span><button type="button" id="cmpBtn">비교하기</button></div>
+<dialog id="cmpDlg"><div class="sheet" id="cmpSheet"></div></dialog>
+
+<div class="composer"><form id="f">
+  <input id="q" autocomplete="off" placeholder="예: 부모님 추석 선물 견과류 5만원 이하" aria-label="메시지">
+  <button class="send" aria-label="보내기">↑</button>
+</form></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const log=$("#log");
+let sid=null; const picked=new Map(); let lastCards=[];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const md=s=>esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
+const won=v=>v==null?"미확인":v.toLocaleString("ko-KR")+"원";
+
+["견과류 선물세트 추천","쿠팡에서 두바이 쫀득쿠키","캠핑 가서 구워 먹을 고기 세 개만","엄마 생신 선물 10만원대 한우"]
+ .forEach(t=>{const b=document.createElement("button");b.className="chip";b.type="button";b.textContent=t;b.onclick=()=>send({message:t},t);$("#starter").append(b)});
+
+fetch("/api/health").then(r=>r.json()).then(h=>{$("#mode").textContent=`NLU ${h.nlu} · 엔진 ${h.engine}`}).catch(()=>{});
+
+$("#f").addEventListener("submit",e=>{e.preventDefault();const t=$("#q").value.trim();if(!t)return;$("#q").value="";send({message:t},t)});
+$("#reset").onclick=()=>{sid=null;picked.clear();updateTray();log.querySelectorAll(".turn-user,.turn-bot").forEach(n=>n.remove());$("#hero").hidden=false};
+
+async function send(payload,userText){
+  $("#hero").hidden=true;
+  if(userText){const u=document.createElement("div");u.className="turn-user";u.innerHTML=`<div>${esc(userText)}</div>`;log.append(u)}
+  const bot=document.createElement("div");bot.className="turn-bot";bot.innerHTML='<span class="typing" aria-label="생각 중"><i></i><i></i><i></i></span>';log.append(bot);
+  bot.scrollIntoView({behavior:"smooth",block:"end"});
+  try{
+    const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:sid,...payload})});
+    const d=await r.json(); sid=d.session_id; bot.innerHTML=""; d.blocks.forEach(b=>bot.append(render(b)));
+  }catch(e){bot.innerHTML='<p class="notice warn">연결에 문제가 있어요. 잠시 후 다시 시도해 주세요.</p>'}
+  bot.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function render(b){
+  const el=document.createElement("div"), d=b.data;
+  if(b.type==="text"){el.className="txt";el.innerHTML=md(d.md)}
+  else if(b.type==="notice"){el.className="notice "+(d.tone||"");el.innerHTML=md(d.md)}
+  else if(b.type==="verdict"){el.className="verdict";el.innerHTML=md(d.md)}
+  else if(b.type==="product_list"){el.className="plist";lastCards=d.items;d.items.forEach(c=>el.append(cardEl(c)))}
+  else if(b.type==="clarify_form"){el.append(formEl(d))}
+  else if(b.type==="chips"){el.className="chips";d.items.forEach(t=>{const c=document.createElement("button");c.type="button";c.className="chip";c.textContent=t;
+    c.onclick=()=>send(d.mode==="chip"?{chip:t}:{message:t},t);el.append(c)})}
+  return el;
+}
+
+function cardEl(c){
+  const el=document.createElement("article");el.className="card";
+  const ship=c.shipping_fee;
+  const total=c.total!=null?c.total:c.price;
+  const breakdown= ship==null ? `상품가 ${won(c.price)} + <span class="unk">배송비 미확인</span>`
+                 : ship===0 ? `무료배송` : `${won(c.price)}${c.original_price>c.price?` <s>${won(c.original_price)}</s>`:""} + 배송비 ${won(ship)}`;
+  const unit=c.unit_price?` · ${c.unit_count}개 기준 개당 약 ${won(c.unit_price)}`:"";
+  const img=c.image?`<img src="${esc(c.image)}" alt="" loading="lazy">`:esc((c.title||"?").replace(/^\S+\s/,"").slice(0,1));
+  const key=c.mall+":"+(c.pid||c.title);
+  el.innerHTML=`
+   <div class="thumb">${img}</div>
+   <div>
+    <div class="badges">${c.badges.map(x=>`<span class="badge ${/할인/.test(x)?"sale":""}">${esc(x)}</span>`).join("")}</div>
+    <div class="title">${esc(c.title)}</div>
+    <div class="price"><span class="lbl">${ship==null?"조회가":"실구매"}</span><span class="total">${won(total)}</span>
+      ${c.original_price&&c.original_price>c.price&&!ship?`<span class="orig">${won(c.original_price)}</span>`:""}</div>
+    <div class="breakdown">${breakdown}${unit}</div>
+    ${c.spec?`<div class="spec">${esc(c.spec)}</div>`:""}
+    ${c.reason?`<div class="reason">${esc(c.reason)}</div>`:""}
+    <div class="ev">${c.evidence.map(x=>`<span>✓ ${esc(x)}</span>`).join("")}${c.unverified.map(x=>`<span class="no">? ${esc(x)} 미확인</span>`).join("")}</div>
+    <div class="meta"><span class="src"><i class="${esc(c.mall)}"></i>${esc(c.source)}</span>
+      <span class="when ${c.stale?"stale":""}">${esc(c.observed)}</span>
+      ${c.url?`<a class="cta" href="/go/${sid}/${c.rank}" target="_blank" rel="noopener">${esc(c.cta)} ↗</a>`:`<span class="cta off">${esc(c.cta)}</span>`}</div>
+   </div>
+   <button class="cmp" type="button" aria-label="비교함에 담기" aria-pressed="${picked.has(key)}">${picked.has(key)?"✓":"+"}</button>`;
+  el.querySelector(".cmp").onclick=e=>{
+    const b=e.currentTarget;
+    if(picked.has(key)){picked.delete(key)}else{if(picked.size>=3){alertTray("최대 3개까지 비교할 수 있어요");return}picked.set(key,c)}
+    b.setAttribute("aria-pressed",picked.has(key));b.textContent=picked.has(key)?"✓":"+";updateTray();
+  };
+  return el;
+}
+
+function formEl(d){
+  const box=document.createElement("form");box.className="form";const ans={};
+  d.questions.forEach(q=>{
+    const w=document.createElement("div");w.className="q";w.setAttribute("role","radiogroup");w.setAttribute("aria-label",q.label);
+    w.innerHTML=`<h4>${esc(q.label)}</h4><div class="opts"></div>`;
+    q.options.forEach(o=>{const b=document.createElement("button");b.type="button";b.className="opt";b.setAttribute("role","radio");b.setAttribute("aria-checked","false");b.textContent=o.label;
+      b.onclick=()=>{w.querySelectorAll(".opt").forEach(x=>x.setAttribute("aria-checked","false"));b.setAttribute("aria-checked","true");ans[q.id]=o.value;sub.disabled=false};
+      w.querySelector(".opts").append(b)});
+    box.append(w);
+  });
+  const sub=document.createElement("button");sub.className="submit";sub.disabled=true;sub.textContent=d.submit+"  →";box.append(sub);
+  box.onsubmit=e=>{e.preventDefault();const labels=[...box.querySelectorAll('[aria-checked="true"]')].map(x=>x.textContent).join(" · ");
+    box.querySelectorAll("button").forEach(x=>x.disabled=true);send({answers:ans},labels)};
+  return box;
+}
+
+function updateTray(){const n=picked.size;$("#tray").classList.toggle("on",n>0);$("#trayTxt").textContent=`비교함 ${n}개`;$("#cmpBtn").disabled=n<2}
+function alertTray(t){$("#trayTxt").textContent=t;setTimeout(updateTray,1600)}
+$("#cmpBtn").onclick=()=>{
+  const cs=[...picked.values()];
+  const tot=c=>c.total!=null?c.total:c.price;
+  const minT=Math.min(...cs.map(tot)); const maxR=Math.max(...cs.map(c=>c.evidence.length));
+  const row=(h,f,best)=>`<tr><th>${h}</th>${cs.map(c=>`<td class="${best&&best(c)?"best":""}">${f(c)}</td>`).join("")}</tr>`;
+  $("#cmpSheet").innerHTML=`<h3>비교하기</h3><div class="tblwrap"><table class="tbl">
+   ${row("상품",c=>esc(c.title))}
+   ${row("실구매가",c=>won(tot(c))+(c.shipping_fee==null?" <small>(배송비 미확인)</small>":""),c=>tot(c)===minT)}
+   ${row("개당",c=>c.unit_price?won(c.unit_price):"-")}
+   ${row("판매처",c=>esc(c.source))}
+   ${row("확인된 근거",c=>c.evidence.map(esc).join("<br>")||"-")}
+   ${row("미확인",c=>c.unverified.map(esc).join(", ")||"-")}
+   ${row("조회",c=>esc(c.observed))}
+  </table></div><p class="notice">초록색은 비교 항목 중 가장 유리한 값이에요.</p>
+  <button class="submit" type="button" onclick="cmpDlg.close()">닫기</button>`;
+  $("#cmpDlg").showModal();
+};
+</script>
+</body>
+</html>

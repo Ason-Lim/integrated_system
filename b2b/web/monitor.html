@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>선물 입찰 모니터</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+:root{--bg:#f3f5f8;--panel:#fff;--ink:#14212e;--ink2:#46576a;--ink3:#8494a5;--line:#dde3ea;--rail:#0f1a24;--rail2:#18293a;
+ --ok:#1f7a4a;--ok-s:#e3f4ea;--hold:#9a6200;--hold-s:#fff1d1;--ex:#b42318;--ex-s:#fde8e6;--acc:#1d5fa8;--acc-s:#e7f0fb;--mut-s:#eef1f4}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Pretendard Variable",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.55}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+aside{background:var(--rail);color:#d6e0ea;padding:18px 14px;position:sticky;top:0;height:100vh}
+aside h1{font-size:16px;margin:0 0 2px;color:#fff} aside .sub{font-size:12px;color:#7f93a8;margin-bottom:18px}
+nav a{display:block;color:#c3d1de;text-decoration:none;padding:9px 12px;border-radius:10px;margin:2px 0}
+nav a[aria-current=page]{background:var(--rail2);color:#fff;font-weight:650}
+nav a:hover{background:#15222f}
+.railnote{font-size:12px;color:#7f93a8;margin-top:22px;line-height:1.6}
+main{padding:22px 28px 60px;min-width:0}
+.top{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.top h2{margin:0;font-size:22px;letter-spacing:-.02em}
+.tabs{display:flex;gap:4px;margin-left:auto;background:var(--mut-s);border-radius:12px;padding:4px}
+.tabs button{border:0;background:transparent;border-radius:9px;padding:6px 14px;cursor:pointer;font-weight:600;color:var(--ink2)}
+.tabs button[aria-selected=true]{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.banner{background:var(--hold-s);color:var(--hold);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:0 0 14px}
+.banner b{font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi span{display:block;font-size:12px;color:var(--ink3)} .kpi b{font-size:22px;font-variant-numeric:tabular-nums}
+.kpi.k-open b{color:var(--ok)} .kpi.k-closing b{color:var(--hold)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 12px;font-size:13px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+select,input[type=search],input[type=text],input[type=date],textarea{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 10px;font-size:13.5px}
+input[type=search]{min-width:200px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 12px;font-size:13.5px;cursor:pointer;font-weight:600;white-space:nowrap}
+.btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:default}
+.spacer{flex:1}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px;align-items:start}
+.grid.nodetail{grid-template-columns:minmax(0,1fr)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
+.panel h3{margin:0 0 10px;font-size:15px}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border-bottom:1px solid var(--line);padding:8px 8px;text-align:left;vertical-align:top}
+thead th{font-size:12px;color:var(--ink3);font-weight:600;white-space:nowrap}
+tbody tr{cursor:pointer} tbody tr:hover td{background:#f8fafc} tbody tr[aria-selected=true] td{background:var(--acc-s)}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap;display:inline-block}
+.s-입찰중{background:var(--ok-s);color:var(--ok)} .s-마감임박{background:var(--hold-s);color:var(--hold)}
+.s-입찰마감{background:var(--mut-s);color:var(--ink3)} .s-마감일{background:var(--mut-s);color:var(--ink2)}
+.v{font-size:11px;border-radius:6px;padding:1px 6px;white-space:nowrap}
+.v-verified{background:var(--ok-s);color:var(--ok)} .v-document_provided{background:var(--acc-s);color:var(--acc)}
+.v-unverified{background:var(--hold-s);color:var(--hold)} .v-legacy_unverified{background:var(--ex-s);color:var(--ex)}
+.t{font-weight:600} .t small{display:block;color:var(--ink3);font-weight:400;font-size:12px}
+.dday{font-size:11.5px;color:var(--ink3)}
+.empty{color:var(--ink3);padding:24px 6px;text-align:center}
+/* 상세 */
+.detail{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
+.detail h3{font-size:16px;line-height:1.4}
+dl.kv{display:grid;grid-template-columns:86px 1fr;gap:4px 10px;margin:0 0 12px;font-size:13px}
+dl.kv dt{color:var(--ink3)} dl.kv dd{margin:0;word-break:break-all}
+.sec{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.sec h4{margin:0 0 6px;font-size:13.5px}
+.sec ul{margin:0;padding-left:18px;font-size:13px}
+.basis{font-size:12px;color:var(--ink3);margin-top:6px}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.up{display:inline-block}
+.log{background:#0f1a24;color:#cfe0f0;border-radius:12px;padding:10px 12px;font-family:ui-monospace,monospace;font-size:12.5px;white-space:pre-wrap;max-height:220px;overflow:auto;margin-bottom:12px}
+/* 트렌드 */
+.tgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.hb{display:grid;grid-template-columns:160px 1fr 92px;gap:10px;align-items:center;font-size:13px;margin:5px 0}
+.hb .track{height:12px;background:var(--mut-s);border-radius:6px;overflow:hidden}
+.hb .track i{display:block;height:100%;background:var(--acc);border-radius:6px}
+.hb .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink2)}
+.months{display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:8px;border-bottom:1px solid var(--line)}
+.months div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.months i{display:block;width:70%;background:var(--acc);border-radius:4px 4px 0 0}
+.months b{font-size:11.5px;font-weight:600;color:var(--ink2)}
+.mlabels{display:flex;gap:6px} .mlabels span{flex:1;text-align:center;font-size:11px;color:var(--ink3);min-width:0;overflow:hidden}
+.report li{margin:4px 0}
+.toggle{display:flex;align-items:center;gap:6px;font-size:13px}
+/* 점검 */
+.evrow{display:grid;grid-template-columns:70px 1fr 70px 220px;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding:8px 0;font-size:13.5px}
+.evrow input{width:60px}
+.evres{font-size:28px;font-weight:800} .evres small{font-size:14px;color:var(--ink3);font-weight:500}
+dialog{border:0;border-radius:16px;padding:0;width:min(560px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog form{padding:20px;display:grid;gap:10px}
+dialog label{display:grid;gap:4px;font-size:13px;color:var(--ink2)}
+dialog textarea{min-height:120px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+[hidden]{display:none!important}
+@media (max-width:1100px){.grid{grid-template-columns:1fr}.detail{position:static;max-height:none}.kpis{grid-template-columns:repeat(3,1fr)}.tgrid{grid-template-columns:1fr}}
+@media (max-width:760px){.app{grid-template-columns:1fr}aside{position:static;height:auto}main{padding:14px 12px}.kpis{grid-template-columns:repeat(2,1fr)}
+ .hb{grid-template-columns:110px 1fr 56px}.evrow{grid-template-columns:1fr 1fr}.tabs{margin-left:0}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <h1>B2B 입찰 콘솔</h1><div class="sub">내부 전용 · 외부 발송 기능 없음</div>
+  <nav aria-label="B2B 메뉴"><a href="/">프롬프트 콘솔</a><a href="/monitor" aria-current="page">선물 입찰 모니터</a></nav>
+  <div class="railnote">smallbiz-monitor(B2B gift-monitor)와 gift_trend_analyzer 기능을 합친 화면입니다. 공고별 조건 분석·견적 요청서·제안서는 콘솔에서 이어집니다.</div>
+</aside>
+<main>
+  <div class="top"><h2>선물 입찰 모니터</h2>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="list">공고 모니터</button>
+      <button role="tab" aria-selected="false" data-tab="trend">트렌드 분석</button>
+      <button role="tab" aria-selected="false" data-tab="eval">준비도 점검</button>
+    </div>
+  </div>
+  <div class="banner" id="legacyBanner" hidden></div>
+
+  <!-- 공고 모니터 -->
+  <section id="tab-list">
+    <div class="kpis" id="kpis"></div>
+    <div class="log" id="log" hidden></div>
+    <div class="bar">
+      <div class="chips" id="statusChips"></div>
+      <select id="inst" aria-label="기관 유형"><option>전체</option><option>공공기관</option><option>지자체 산하기관</option><option>금융기관</option><option>민간기업</option></select>
+      <select id="btype" aria-label="공고 유형"><option>전체</option></select>
+      <input type="search" id="kw" placeholder="공고명·기관 검색" aria-label="검색">
+      <select id="scope" aria-label="데이터 범위"><option value="default">미검증 기존 데이터 제외</option><option value="all">전체 (기존 데이터 포함)</option><option value="trusted">원천 확인된 공고만</option></select>
+      <span class="spacer"></span>
+      <button class="btn primary" id="collect" type="button">나라장터 수집</button>
+      <button class="btn" id="addBtn" type="button">공고 직접 등록</button>
+      <label class="btn up">CSV·JSON 올리기<input type="file" id="file" accept=".csv,.json" hidden></label>
+      <a class="btn" id="xlsx" href="#">엑셀</a>
+    </div>
+    <div class="grid nodetail" id="grid">
+      <div class="panel"><div class="tblwrap"><table>
+        <thead><tr><th>상태</th><th>공고</th><th>유형 (규칙 분류)</th><th class="num">예산</th><th>마감</th><th>신뢰 등급</th></tr></thead>
+        <tbody id="rows"></tbody></table></div><div class="empty" id="empty" hidden>조건에 맞는 공고가 없습니다.</div></div>
+      <div class="panel detail" id="detail" hidden></div>
+    </div>
+  </section>
+
+  <!-- 트렌드 -->
+  <section id="tab-trend" hidden>
+    <div class="bar"><label class="toggle"><input type="checkbox" id="incLegacy"> 미검증 기존 데이터 포함</label>
+      <span class="spacer"></span><span class="dday" id="trendScope"></span></div>
+    <div class="kpis" id="tkpis"></div>
+    <div class="panel" style="margin-bottom:14px"><h3>트렌드 요약</h3><ul class="report" id="report"></ul>
+      <div class="basis">문장은 아래 집계 숫자로만 만들었고, 유형·자격요건은 공고 제목·본문 키워드 규칙으로 분류했습니다.</div></div>
+    <div class="tgrid" id="tcharts"></div>
+  </section>
+
+  <!-- 준비도 점검 -->
+  <section id="tab-eval" hidden>
+    <div class="grid" style="grid-template-columns:minmax(0,1fr) 340px">
+      <div class="panel"><h3>제안 준비도 자가 점검</h3><div class="basis" id="evNote"></div><div id="evForm"></div></div>
+      <div class="panel" id="evOut"><h3>결과</h3><div class="empty">항목을 고르면 점수가 계산됩니다.</div></div>
+    </div>
+  </section>
+</main>
+</div>
+
+<dialog id="addDlg"><form id="addForm" method="dialog">
+  <h3 style="margin:0">공고 직접 등록</h3>
+  <label>공고명 *<input type="text" id="f_title" required></label>
+  <label>기관명<input type="text" id="f_agency"></label>
+  <label>마감일<input type="date" id="f_deadline"></label>
+  <label>공고 상세 URL<input type="text" id="f_url" placeholder="https://..."></label>
+  <label>예산 (원문 그대로)<input type="text" id="f_budget" placeholder="예: 금 95,000,000원"></label>
+  <label>공고 본문·요약 (붙여넣기)<textarea id="f_text"></textarea></label>
+  <div class="actions"><button class="btn primary" value="ok">등록 (원문 대조 전으로 저장)</button><button class="btn" value="cancel" formnovalidate>취소</button></div>
+</form></dialog>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const won=v=>v==null?"—":v>=1e8?(v/1e8).toFixed(v%1e8?1:0)+"억원":v>=1e4?Math.round(v/1e4).toLocaleString()+"만원":v.toLocaleString()+"원";
+const BTYPES=["온누리상품권","모바일상품권","선물세트 (육류)","선물세트 (과일/농산물)","선물세트 (생선/수산물)","선물세트 (가전제품)","선물세트 (주방기구/생활용품)","선물세트 (건강식품/기타)"];
+BTYPES.forEach(t=>$("#btype").insertAdjacentHTML("beforeend",`<option>${t}</option>`));
+const ST=["전체","입찰중","마감임박","입찰마감","마감일 미확인"]; let status="전체", selected=null, lastRows=[], legacyN=0;
+ST.forEach(s=>{const b=document.createElement("button");b.className="chip";b.type="button";b.textContent=s;b.setAttribute("aria-pressed",s===status);
+  b.onclick=()=>{status=s;document.querySelectorAll("#statusChips .chip").forEach(x=>x.setAttribute("aria-pressed",x===b));load()};$("#statusChips").append(b)});
+
+async function api(url,opt){const r=await fetch(url,opt);if(r.status===401){location.href="/login";throw new Error("auth")}
+  if(!r.ok){let m=r.statusText;try{m=(await r.json()).detail||m}catch(e){}throw new Error(m)}return r.json()}
+function q(){return new URLSearchParams({status,institution_type:$("#inst").value,bid_type:$("#btype").value,keyword:$("#kw").value,scope:$("#scope").value})}
+function dday(d){const m=/(\d{4})-?(\d{2})-?(\d{2})/.exec(d||"");if(!m)return"";const t=new Date(+m[1],m[2]-1,+m[3]);const n=Math.ceil((t-new Date(new Date().toDateString()))/864e5);
+  return n>0?`D-${n}`:n===0?"D-day":`${-n}일 지남`}
+
+async function load(){
+  const d=await api("/api/monitor/bids?"+q()); lastRows=d.rows;
+  const vc=d.verification_counts;
+  legacyN=vc.legacy_unverified||0; $("#legacyBanner").hidden=!legacyN||!$("#tab-eval").hidden;
+  $("#legacyBanner").innerHTML=`<b>미검증 기존 데이터 ${vc.legacy_unverified}건</b>이 있습니다. smallbiz-monitor DB에서 가져온 공고로, 원래 코드에 직접 적혀 있던 시드·시뮬레이션 데이터입니다. 실제 공고인지 확인 전에는 판단 근거로 쓰지 마세요. 기본 목록과 트렌드 통계에서는 빠져 있습니다.`;
+  const cnt=k=>d.rows.filter(r=>r.status===k).length;
+  $("#kpis").innerHTML=[["k-open","입찰중",cnt("입찰중")],["k-closing","마감임박 (3일 이내)",cnt("마감임박")],["","입찰마감",cnt("입찰마감")],
+    ["","원천 확인·제공 문서",(vc.verified||0)+(vc.document_provided||0)],["","원문 대조 전",vc.unverified||0]]
+    .map(([c,l,v])=>`<div class="kpi ${c}"><span>${l}</span><b>${v}</b></div>`).join("");
+  $("#rows").innerHTML=d.rows.map(r=>`<tr data-id="${esc(r.bid_id)}" aria-selected="${r.bid_id===selected}">
+    <td><span class="pill s-${esc(r.status.split(" ")[0])}">${esc(r.status)}</span></td>
+    <td class="t">${esc(r.title)}<small>${esc(r.agency||"기관 미상")} · ${esc(r.institution_type)}</small></td>
+    <td>${esc(r.bid_type)}</td><td class="num">${esc(won(r.budget))}</td>
+    <td>${esc((r.deadline||"").slice(0,16))}<div class="dday">${esc(dday(r.deadline))}</div></td>
+    <td><span class="v v-${esc(r.verification)}">${esc(r.verification_label)}</span></td></tr>`).join("");
+  $("#empty").hidden=d.rows.length>0;
+  document.querySelectorAll("#rows tr").forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.id));
+  $("#xlsx").href="/api/monitor/export.xlsx?"+q();
+}
+["#inst","#btype","#scope"].forEach(s=>$(s).onchange=load); let kwT;$("#kw").oninput=()=>{clearTimeout(kwT);kwT=setTimeout(load,250)};
+
+async function openDetail(id){
+  selected=id;document.querySelectorAll("#rows tr").forEach(tr=>tr.setAttribute("aria-selected",tr.dataset.id===id));
+  const b=await api("/api/monitor/bids/"+encodeURIComponent(id)); const c=b.checkpoints; const req=b.requirement||{};
+  $("#grid").classList.remove("nodetail"); const el=$("#detail"); el.hidden=false;
+  const link=b.url?`<a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.url)}</a>`:"없음";
+  el.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill s-${esc(b.status.split(" ")[0])}">${esc(b.status)}</span><span class="v v-${esc(b.verification)}">${esc(b.verification_label)}</span></div>
+   <h3>${esc(b.title)}</h3>
+   <dl class="kv"><dt>기관</dt><dd>${esc(b.agency||"—")} (${esc(b.institution_type)})</dd><dt>예산</dt><dd>${esc(won(b.budget))}${b.budget_text?` · 원문 "${esc(b.budget_text)}"`:""}</dd>
+   <dt>공고일</dt><dd>${esc(b.posted||"—")}</dd><dt>마감</dt><dd>${esc(b.deadline||"—")} ${esc(dday(b.deadline))}</dd>
+   <dt>담당</dt><dd>${esc([b.department,b.manager,b.contact].filter(Boolean).join(" · ")||"—")}</dd><dt>원문</dt><dd>${link}</dd>
+   <dt>출처</dt><dd>${esc(b.source)}</dd><dt>첨부</dt><dd>${b.attachments.length?b.attachments.map(a=>esc(a.name)).join(", "):"없음"}</dd></dl>
+   ${b.verification==="legacy_unverified"?`<div class="banner">기존 DB의 시드·시뮬레이션 데이터입니다. 담당자·연락처·예산은 출처가 없으니 그대로 쓰지 마세요.</div>`:""}
+   <div class="sec"><h4>추출된 입찰 조건</h4><div style="font-size:13px">${[req.headcount&&`인원 ${req.headcount.toLocaleString()}명`,req.budget_per_person&&`1인 ${won(req.budget_per_person)}`,
+     (req.categories||[]).map(x=>x.name+" "+x.count+"종").join("·"),req.delivery_business_days&&`배송 ${req.delivery_business_days}영업일`].filter(Boolean).join(" · ")||"본문에 인원·1인 예산·품목 정보가 없습니다. 제안요청서를 첨부하세요."}</div></div>
+   <div class="sec"><h4>${esc(c.bid_type)} · 요구 기업 유형 ${esc(c.company_type)}</h4>
+     ${c.qualifications.length?`<div class="dday">자격·요건 키워드: ${c.qualifications.map(esc).join(", ")}</div>`:""}
+     <h4 style="margin-top:8px">점검할 요구사항</h4><ul>${c.requirements.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+     ${c.strategies.length?`<h4 style="margin-top:8px">제안 포인트</h4><ul>${c.strategies.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
+     <h4 style="margin-top:8px">리스크</h4><ul>${c.risks.map(x=>`<li>${esc(x)}</li>`).join("")}</ul><div class="basis">${esc(c.basis)}</div></div>
+   <div class="actions">
+     <a class="btn primary" href="/?q=${encodeURIComponent(b.bid_id+" 분석해줘")}">콘솔에서 분석·제안서</a>
+     <label class="btn up">제안요청서 첨부 (HWPX·PDF·DOCX·TXT)<input type="file" id="att" accept=".hwpx,.pdf,.docx,.txt" hidden></label>
+     ${b.trusted?"":`<button class="btn" id="verify" type="button">원문 대조 완료로 표시</button>`}
+   </div><div class="basis" id="dmsg"></div>`;
+  $("#att").onchange=async e=>{const fd=new FormData();fd.append("file",e.target.files[0]);
+    try{await api(`/api/monitor/bids/${encodeURIComponent(id)}/attachments`,{method:"POST",body:fd});openDetail(id);load()}catch(err){$("#dmsg").textContent="첨부 실패: "+err.message}};
+  const v=$("#verify"); if(v)v.onclick=async()=>{const fd=new FormData();fd.append("note","모니터 화면");
+    try{await api(`/api/monitor/bids/${encodeURIComponent(id)}/verify`,{method:"POST",body:fd});openDetail(id);load()}catch(err){$("#dmsg").textContent=err.message}};
+}
+
+$("#collect").onclick=async()=>{const b=$("#collect");b.disabled=true;b.textContent="수집 중…";const lg=$("#log");lg.hidden=false;lg.textContent="나라장터 OpenAPI 조회 중…";
+  try{const r=await api("/api/monitor/collect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({days:14})});
+    lg.textContent=r.results.flatMap(x=>x.log).join("\n")+`\n→ 신규 ${r.new}건`;load()}catch(e){lg.textContent="수집 실패: "+e.message}
+  b.disabled=false;b.textContent="나라장터 수집"};
+$("#file").onchange=async e=>{const fd=new FormData();fd.append("file",e.target.files[0]);const lg=$("#log");lg.hidden=false;
+  try{const r=await api("/api/bids/upload",{method:"POST",body:fd});lg.textContent=`파일에서 ${r.imported}건을 '원문 대조 전'으로 가져왔습니다.`;load()}catch(err){lg.textContent="가져오기 실패: "+err.message}};
+$("#addBtn").onclick=()=>$("#addDlg").showModal();
+$("#addForm").onsubmit=async e=>{if(e.submitter?.value!=="ok")return;e.preventDefault();
+  try{const b=await api("/api/monitor/bids",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:$("#f_title").value,agency:$("#f_agency").value||null,
+    deadline:$("#f_deadline").value||null,url:$("#f_url").value||null,budget:$("#f_budget").value||null,text:$("#f_text").value})});
+    $("#addDlg").close();$("#addForm").reset();await load();openDetail(b.bid_id)}catch(err){alert("등록 실패: "+err.message)}};
+
+// 탭
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-selected",x===b));
+  ["list","trend","eval"].forEach(t=>$("#tab-"+t).hidden=t!==b.dataset.tab);$("#legacyBanner").hidden=!legacyN||b.dataset.tab==="eval";if(b.dataset.tab==="trend")trend();if(b.dataset.tab==="eval")evalInit()});
+
+function hbars(title,rows,note){const max=Math.max(1,...rows.map(r=>r.count));
+  return `<div class="panel"><h3>${esc(title)}</h3>${rows.map(r=>`<div class="hb"><span>${esc(r.label)}</span><div class="track"><i style="width:${r.count/max*100}%"></i></div><span class="n">${r.count}건${r.pct!=null?` · ${r.pct}%`:""}</span></div>`).join("")||'<div class="empty">데이터 없음</div>'}${note?`<div class="basis">${esc(note)}</div>`:""}</div>`}
+async function trend(){
+  const t=await api("/api/monitor/trends?include_legacy="+$("#incLegacy").checked);
+  const bn=$("#legacyBanner");
+  if($("#incLegacy").checked){bn.dataset.def=bn.dataset.def||bn.innerHTML;bn.innerHTML="<b>지금 트렌드에 미검증 기존 데이터가 포함되어 있습니다.</b> smallbiz-monitor 시드·시뮬레이션 데이터라 실제 시장 동향으로 해석하면 안 됩니다. 화면 구성 확인용으로만 쓰세요."}
+  else if(bn.dataset.def)bn.innerHTML=bn.dataset.def;
+  $("#trendScope").textContent=`집계 ${t.total}건`+(t.excluded.legacy?` · 미검증 기존 데이터 ${t.excluded.legacy}건 제외`:"");
+  $("#tkpis").innerHTML=[["k-open","입찰중",t.kpi.open],["k-closing","마감임박",t.kpi.closing],["","입찰마감",t.kpi.closed],["","실물 선물세트 비중",t.kpi.physical_pct+"%"],["","예산 중앙값",won(t.kpi.median_budget)]]
+    .map(([c,l,v])=>`<div class="kpi ${c}"><span>${l}</span><b>${esc(v)}</b></div>`).join("");
+  $("#report").innerHTML=t.report.map(x=>`<li>${esc(x)}</li>`).join("");
+  const mx=Math.max(1,...t.deadline_months.map(m=>m.count));
+  const months=`<div class="panel"><h3>월별 마감 공고 수</h3>${t.deadline_months.length?`<div class="months">${t.deadline_months.map(m=>`<div><b>${m.count}</b><i style="height:${m.count/mx*100}%"></i></div>`).join("")}</div>
+    <div class="mlabels">${t.deadline_months.map(m=>`<span>${esc(m.label.slice(2))}</span>`).join("")}</div>`:'<div class="empty">마감일 데이터 없음</div>'}</div>`;
+  $("#tcharts").innerHTML=hbars("선물 조달 유형",t.bid_types,"규칙 분류")+hbars("예산 규모",t.budget_bands)+hbars("요구 기업 유형",t.company_types,"규칙 분류")
+    +hbars("자격·요건 키워드 (중복 허용)",t.qualifications.map(x=>({...x,pct:null})))+hbars("기관 유형",t.institution_types)+hbars("시기",t.occasions)+months;
+}
+$("#incLegacy").onchange=trend;
+
+let evForm=null; const evAns={}, evW={};
+async function evalInit(){if(evForm)return;evForm=await api("/api/monitor/evaluator");$("#evNote").textContent=evForm.note;
+  $("#evForm").innerHTML=evForm.items.map(it=>`<div class="evrow"><span class="dday">${esc(it.area)}</span><b>${esc(it.label)}</b>
+    <label class="dday">배점 <input type="number" min="0" max="100" value="${it.weight}" data-w="${esc(it.key)}"></label>
+    <select data-k="${esc(it.key)}"><option value="">선택 안 함</option>${it.options.map(o=>`<option>${esc(o)}</option>`).join("")}</select></div>`).join("");
+  document.querySelectorAll("[data-k]").forEach(s=>s.onchange=()=>{evAns[s.dataset.k]=s.value;evRun()});
+  document.querySelectorAll("[data-w]").forEach(s=>s.oninput=()=>{evW[s.dataset.w]=+s.value;evRun()});}
+async function evRun(){const ans=Object.fromEntries(Object.entries(evAns).filter(([k,v])=>v));
+  const r=await api("/api/monitor/evaluator",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({answers:ans,weights:evW})});
+  $("#evOut").innerHTML=`<h3>결과</h3><div class="evres">${r.score}<small> / 응답 항목 ${r.answered_max}점 (전체 ${r.max}점)</small></div>
+   <div style="font-weight:700;margin:4px 0">${esc(r.grade)}</div>${r.weak.length?`<div class="dday">보강 우선순위: ${r.weak.map(esc).join(", ")}</div>`:""}
+   ${r.missing.length?`<div class="dday">미응답: ${r.missing.map(esc).join(", ")}</div>`:""}<div class="basis">${esc(r.note)}</div>`}
+
+load();
+</script>
+</body>
+</html>

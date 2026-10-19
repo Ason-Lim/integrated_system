@@ -1,0 +1,19 @@
+{
+  "title": "사용자 원문 기반 파스타 재료 점검",
+  "ingredients": [
+    {
+      "name": "파스타 면",
+      "required": true,
+      "quantity": 100,
+      "unit": "g",
+      "cooking_state": "dry",
+      "owned": 30,
+      "owned_unit": "g",
+      "owned_state": "dry",
+      "evidence": {
+        "source_id": "user-provided-example",
+        "raw_text": "마른 면 100g (사용법용 합성 예시)"
+      }
+    }
+  ]
+}

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B2B 입찰 콘솔</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+:root{--bg:#f3f5f8;--panel:#fff;--ink:#14212e;--ink2:#46576a;--ink3:#8494a5;--line:#dde3ea;--rail:#0f1a24;--rail2:#18293a;
+ --ok:#1f7a4a;--ok-s:#e3f4ea;--hold:#9a6200;--hold-s:#fff1d1;--ex:#b42318;--ex-s:#fde8e6;--acc:#1d5fa8;--acc-s:#e7f0fb}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Pretendard Variable",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.6}
+button,textarea,input{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+aside{background:var(--rail);color:#d6e0ea;padding:18px 16px;position:sticky;top:0;height:100vh;overflow:auto}
+aside h1{font-size:16px;margin:0 0 2px;color:#fff} aside .sub{font-size:12px;color:#7f93a8;margin-bottom:18px}
+aside h2{font-size:11.5px;letter-spacing:.08em;color:#7f93a8;margin:18px 0 8px;text-transform:uppercase}
+.ws{background:var(--rail2);border-radius:10px;padding:10px 12px;font-size:13px}
+.ws b{color:#fff;display:block}
+.bid{display:block;width:100%;text-align:left;background:transparent;border:1px solid #23364a;border-radius:10px;padding:9px 11px;margin:6px 0;cursor:pointer;color:#d6e0ea}
+.bid:hover{border-color:#3d5a78} .bid small{display:block;color:#7f93a8}
+.up{display:block;border:1px dashed #3d5a78;border-radius:10px;padding:10px;text-align:center;font-size:12.5px;cursor:pointer;color:#a9bccf}
+nav a{display:block;color:#c3d1de;text-decoration:none;padding:8px 11px;border-radius:10px;margin:2px 0}
+nav a[aria-current=page]{background:var(--rail2);color:#fff;font-weight:650} nav a:hover{background:#15222f}
+.pill{font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.s-입찰중{background:var(--ok-s);color:var(--ok)}.s-마감임박{background:var(--hold-s);color:var(--hold)}.s-입찰마감,.s-마감일{background:#eef1f4;color:var(--ink3)}
+.v{font-size:11px;border-radius:6px;padding:1px 6px;white-space:nowrap}.v-verified{background:var(--ok-s);color:var(--ok)}.v-document_provided{background:var(--acc-s);color:var(--acc)}
+.v-unverified{background:var(--hold-s);color:var(--hold)}.v-legacy_unverified{background:var(--ex-s);color:var(--ex)}
+.log{background:#0f1a24;color:#cfe0f0;border-radius:12px;padding:10px 12px;font-family:ui-monospace,monospace;font-size:12.5px;white-space:pre-wrap;max-height:220px;overflow:auto}
+.hb{display:grid;grid-template-columns:150px 1fr 80px;gap:10px;align-items:center;font-size:13px;margin:4px 0}
+.hb .track{height:10px;background:#eef1f4;border-radius:5px;overflow:hidden}.hb .track i{display:block;height:100%;background:var(--acc)}
+.hb .n{text-align:right;color:var(--ink2);font-variant-numeric:tabular-nums}
+.tg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.tg h4{margin:0 0 6px;font-size:13.5px}
+.cp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;font-size:13px}.cp ul{margin:0;padding-left:18px}.cp h4{margin:0 0 4px;font-size:13px}
+@media (max-width:900px){.tg,.cp{grid-template-columns:1fr}.hb{grid-template-columns:100px 1fr 64px}}
+.doclink{display:block;color:#9cc8ff;font-size:13px;margin:4px 0;text-decoration:none}
+main{padding:22px 28px 200px;max-width:1180px;width:100%}
+.turn{margin:0 0 22px}
+.prompt{display:flex;gap:10px;align-items:flex-start;margin:0 0 10px}
+.prompt .who{width:26px;height:26px;border-radius:8px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:12px;flex:none}
+.prompt .t{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;white-space:pre-wrap;max-width:900px}
+.res{margin-left:36px}
+.txt{margin:4px 0 10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:10px 0}
+.panel h3{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px}
+.panel h3 .n{font-size:12px;color:var(--ink3);font-weight:500}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border-bottom:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+thead th{background:#f0f4f8;font-weight:650;font-size:12.5px;color:var(--ink2)}
+.q{color:var(--ink3);font-size:12.5px}
+.tag{font-size:11px;border-radius:6px;padding:1px 6px;background:#eef1f4;color:var(--ink2);white-space:nowrap}
+.miss{margin-top:8px;font-size:13px;color:var(--hold)}
+.cov{display:grid;gap:8px}
+.covrow{display:grid;grid-template-columns:150px 1fr 190px;gap:12px;align-items:center;font-size:13.5px}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#eef1f4}
+.bar i.ok{background:var(--ok)}.bar i.hold{background:#f0b429}.bar i.ex{background:#e4a4a0}
+.gap{color:var(--ex);font-weight:700}
+.filters{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.filters button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 11px;font-size:12.5px;cursor:pointer}
+.filters button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.dec{font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.dec.ELIGIBLE{background:var(--ok-s);color:var(--ok)}.dec.HOLD{background:var(--hold-s);color:var(--hold)}.dec.EXCLUDED{background:var(--ex-s);color:var(--ex)}
+tr.cand{cursor:pointer} tr.cand:hover td{background:#fafbfc}
+.nm small{display:block;color:var(--ink3);font-size:12px}
+.chips span{display:inline-block;font-size:11.5px;border-radius:6px;padding:1px 6px;margin:1px 2px 1px 0}
+.chips .u{background:var(--hold-s);color:var(--hold)} .chips .f{background:var(--ex-s);color:var(--ex)}
+tr.detail td{background:#fafbfc;font-size:12.5px}
+.ck{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px}
+.ck>div{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff}
+.ck .PASS b{color:var(--ok)}.ck .FAIL b{color:var(--ex)}.ck .UNKNOWN b{color:var(--hold)}
+.num{text-align:right;white-space:nowrap}
+.wf{display:grid;gap:4px;margin:8px 0}
+.wfrow{display:grid;grid-template-columns:200px 1fr 110px;gap:10px;align-items:center;font-size:13px}
+.wfbar{height:14px;border-radius:4px;background:#eef1f4;position:relative;overflow:hidden}
+.wfbar i{position:absolute;top:0;bottom:0;background:var(--acc)} .wfbar i.unk{background:repeating-linear-gradient(45deg,#f0b429 0 6px,#fff1d1 6px 12px)}
+.residual{font-weight:700;margin-top:6px} .residual.unk{color:var(--hold)}
+.neg{color:var(--ex);font-weight:700}
+details{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;background:#fff}
+summary{cursor:pointer} pre{white-space:pre-wrap;font-family:inherit;background:#f7f9fb;border-radius:8px;padding:8px 10px;font-size:13px}
+.copy{float:right;border:1px solid var(--line);background:#fff;border-radius:8px;padding:2px 10px;font-size:12px;cursor:pointer}
+.docs a{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;margin:4px 6px 4px 0;text-decoration:none;color:var(--acc);font-weight:600}
+.outline{columns:2;font-size:13.5px;margin:0;padding-left:18px}
+.notice{font-size:13px;color:var(--ink2);background:var(--acc-s);border-radius:10px;padding:8px 12px;margin:8px 0}
+.notice.warn{background:var(--hold-s);color:var(--hold)}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.actions button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.actions button:hover{border-color:var(--ink2)}
+.composer{position:fixed;left:280px;right:0;bottom:0;padding:12px 28px 18px;background:linear-gradient(to top,var(--bg) 75%,transparent)}
+.composer form{max-width:1124px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;box-shadow:0 6px 24px rgba(20,33,46,.08)}
+.composer textarea{width:100%;border:0;resize:none;outline:none;min-height:46px;max-height:220px}
+.crow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.crow .hint{font-size:12px;color:var(--ink3)}
+.go{border:0;background:var(--ink);color:#fff;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}
+.spin{color:var(--ink3);font-size:13px}
+.empty{padding:40px 0 10px} .empty h2{font-size:24px;margin:0 0 6px;letter-spacing:-.02em} .empty p{color:var(--ink2);margin:0 0 14px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+@media (max-width:900px){.app{grid-template-columns:1fr}aside{position:static;height:auto}.composer{left:0;padding:10px 12px}main{padding:16px 12px 220px}
+ .res{margin-left:0}.covrow{grid-template-columns:1fr}.wfrow{grid-template-columns:120px 1fr 80px}.outline{columns:1}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <h1>B2B 입찰 콘솔</h1><div class="sub">내부 전용 · 외부 발송 기능 없음</div>
+  <nav aria-label="B2B 메뉴"><a href="/" aria-current="page">프롬프트 콘솔</a><a href="/monitor">선물 입찰 모니터</a></nav>
+  <h2>현재 작업</h2><div class="ws" id="ws"><b>선택된 공고 없음</b>프롬프트로 시작하세요</div>
+  <h2>공고</h2><div id="bids"></div>
+  <label class="up">공고 파일 올리기 (CSV·JSON)<input type="file" id="file" accept=".csv,.json" hidden></label>
+  <h2>생성 문서</h2><div id="docs"><span class="sub">아직 없음</span></div>
+</aside>
+<main id="main">
+  <div class="empty" id="empty">
+    <h2>무엇을 검토할까요?</h2>
+    <p>공고번호를 말하거나 공고 조건을 그대로 붙여 넣으면 조건 추출 → 후보 판정 → 비용 구조 → 견적 요청서 → 제안서까지 이어서 만듭니다.</p>
+    <div class="actions" id="starter"></div>
+  </div>
+</main>
+</div>
+<div class="composer"><form id="f">
+  <textarea id="p" rows="2" placeholder="예: IBK서비스-2026008 분석해줘 / 직원 500명 1인당 5만원 식품 2종 3영업일 배송 / 제안서 작성해줘"></textarea>
+  <div class="crow"><span class="hint">Enter 실행 · Shift+Enter 줄바꿈</span><button class="go">실행</button></div>
+</form></div>
+<script>
+const $=s=>document.querySelector(s), main=$("#main");
+let wid=null;
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const md=s=>esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
+const won=v=>v==null?"미확인":Number(v).toLocaleString("ko-KR")+"원";
+const LBL={bid_id:"공고번호",agency:"발주기관",title:"사업명",headcount:"예정 인원",budget_per_person:"1인당 예산",vat_included:"VAT 포함",
+ total_budget:"총예산",categories:"품목 구성",min_online_price:"온라인가 하한",setup_days:"폐쇄몰 구축(일)",delivery_business_days:"배송(영업일)",
+ exchange_business_days:"교환(영업일)",deadline:"마감일",settlement:"정산"};
+
+["입찰중 공고 보여줘","입찰 트렌드 분석해줘","IBK서비스-2026008 분석해줘","직원 500명 1인당 5만원(VAT 포함) 식품 2종 생활용품 1종, 온라인가 4만원 이상, 3영업일 이내 배송 조건 분석"]
+ .forEach(t=>$("#starter").append(btn(t)));
+function btn(t){const b=document.createElement("button");b.type="button";b.textContent=t;b.onclick=()=>run(t);return b}
+
+const ta=$("#p");
+ta.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();$("#f").requestSubmit()}});
+$("#f").onsubmit=e=>{e.preventDefault();const t=ta.value.trim();if(t){ta.value="";run(t)}};
+$("#file").onchange=async e=>{const fd=new FormData();fd.append("file",e.target.files[0]);
+  const r=await fetch("/api/bids/upload",{method:"POST",body:fd});const d=await r.json();loadBids();
+const _q=new URLSearchParams(location.search).get("q"); if(_q){history.replaceState(null,"","/");run(_q)}run("공고 목록 보여줘");};
+
+async function loadBids(){const r=await fetch("/api/bids");if(r.status===401){location.href="/login";return}
+  const bs=await r.json();$("#bids").innerHTML="";bs.sort((a,b)=>(a.verification==="legacy_unverified")-(b.verification==="legacy_unverified")).slice(0,8).forEach(b=>{const x=document.createElement("button");x.className="bid";
+  x.innerHTML=`${esc(b.title||b.bid_id)}<small>${esc(b.bid_id)} · ${esc(b.deadline||"")}${b.verification==="legacy_unverified"?" · 미검증 기존 데이터":b.verification==="unverified"?" · 원문 대조 전":""}</small>`;x.onclick=()=>run(`${b.bid_id} 분석해줘`);$("#bids").append(x)})}
+loadBids();
+const _q=new URLSearchParams(location.search).get("q"); if(_q){history.replaceState(null,"","/");run(_q)}
+
+async function run(prompt){
+  $("#empty")?.remove();
+  const turn=document.createElement("div");turn.className="turn";
+  turn.innerHTML=`<div class="prompt"><div class="who">나</div><div class="t">${esc(prompt)}</div></div><div class="res"><div class="spin">실행 중…</div></div>`;
+  main.append(turn);turn.scrollIntoView({behavior:"smooth",block:"end"});
+  const res=turn.querySelector(".res");
+  try{
+    const r=await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({workspace_id:wid,prompt})});
+    if(r.status===401){location.href="/login";return}
+    const d=await r.json();wid=d.workspace_id;res.innerHTML="";d.blocks.forEach(b=>res.append(render(b)));
+    if(d.bid_id)$("#ws").innerHTML=`<b>${esc(d.bid_id)}</b>작업 ID ${esc(wid)} · 마지막 실행 ${esc(d.action)}`;
+  }catch(e){res.innerHTML=`<div class="notice warn">실행 실패: ${esc(e.message)}</div>`}
+  turn.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function panel(title,n){const p=document.createElement("div");p.className="panel";p.innerHTML=`<h3>${esc(title)}${n?`<span class="n">${esc(n)}</span>`:""}</h3>`;return p}
+
+function render(b){
+  if(b.type==="text"){const d=document.createElement("div");d.className="txt";d.innerHTML=md(b.md);return d}
+  if(b.type==="notice"){const d=document.createElement("div");d.className="notice "+(b.tone||"");d.innerHTML=md(b.md);return d}
+  if(b.type==="actions"){const d=document.createElement("div");d.className="actions";b.items.forEach(t=>d.append(btn(t)));return d}
+  if(b.type==="bid_list"){const p=panel("공고",b.rows.length+"건");p.insertAdjacentHTML("beforeend",`<div style="overflow-x:auto"><table><thead><tr><th>상태</th><th>공고</th><th>유형</th><th class=num>예산</th><th>마감</th><th>신뢰 등급</th></tr></thead><tbody>${
+    b.rows.map(r=>`<tr><td><span class="pill s-${esc(r.status.split(" ")[0])}">${esc(r.status)}</span></td><td><b>${esc(r.title)}</b><div class=q>${esc(r.bid_id)} · ${esc(r.agency||"")}</div></td><td>${esc(r.bid_type)}</td><td class=num>${r.budget?won(r.budget):"-"}</td><td>${esc((r.deadline||"").slice(0,16))}</td><td><span class="v v-${esc(r.verification)}">${esc(r.verification_label)}</span></td></tr>`).join("")}</tbody></table></div>`);return p}
+  if(b.type==="log"){const d=document.createElement("div");d.className="log";d.textContent=b.lines.join("\n");return d}
+  if(b.type==="bid_card"){const p=panel(b.title);p.insertAdjacentHTML("beforeend",`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><span class="pill s-${esc(b.status.split(" ")[0])}">${esc(b.status)}</span><span class="v v-${esc(b.verification)}">${esc(b.verification_label)}</span><span class=tag>${esc(b.bid_type)}</span></div>
+    <div class=q>${esc(b.agency||"기관 미상")} · 예산 ${b.budget?won(b.budget):"미기재"} · 마감 ${esc(b.deadline||"-")} · 출처 ${esc(b.source)}${b.url?` · <a href="${esc(b.url)}" target="_blank" rel="noopener">원문</a>`:""}</div>`);return p}
+  if(b.type==="checkpoints"){const p=panel(`${b.bid_type} 점검 포인트`,`요구 기업 유형 ${b.company_type}`);p.insertAdjacentHTML("beforeend",`<div class="cp"><div><h4>요구사항</h4><ul>${b.requirements.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
+    <div><h4>제안 포인트</h4><ul>${b.strategies.map(x=>`<li>${esc(x)}</li>`).join("")||"<li>-</li>"}</ul></div><div><h4>리스크</h4><ul>${b.risks.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div></div><div class="q" style="margin-top:8px">${esc(b.basis)}</div>`);return p}
+  if(b.type==="trends"){const p=panel("입찰 트렌드",`집계 ${b.total}건`+(b.excluded.legacy?` · 미검증 기존 데이터 ${b.excluded.legacy}건 제외`:""));
+    const hb=(t,rows)=>{const m=Math.max(1,...rows.map(r=>r.count));return `<div><h4>${esc(t)}</h4>${rows.map(r=>`<div class="hb"><span>${esc(r.label)}</span><div class="track"><i style="width:${r.count/m*100}%"></i></div><span class="n">${r.count}건${r.pct!=null?" · "+r.pct+"%":""}</span></div>`).join("")}</div>`};
+    p.insertAdjacentHTML("beforeend",`<ul style="margin:0 0 12px;padding-left:18px">${b.report.map(x=>`<li>${esc(x)}</li>`).join("")}</ul><div class="tg">${hb("선물 조달 유형",b.bid_types)}${hb("예산 규모",b.budget_bands)}${hb("요구 기업 유형",b.company_types)}${hb("기관 유형",b.institution_types)}</div>
+    <div class="q" style="margin-top:8px">유형·자격요건은 키워드 규칙 분류입니다. 차트 전체는 <a href="/monitor">선물 입찰 모니터 → 트렌드 분석</a>에서 볼 수 있어요.</div>`);return p}
+  if(b.type==="requirement"){const p=panel("추출한 조건","원문 발췌 포함");p.insertAdjacentHTML("beforeend",`<table><thead><tr><th>항목</th><th>값</th><th>원문</th><th>출처</th></tr></thead><tbody>${
+    b.rows.map(r=>`<tr><td>${esc(LBL[r.field]||r.field)}</td><td><b>${esc(fmt(r.field,r.value))}</b></td><td class=q>${esc(r.quote)}</td><td><span class=tag>${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>
+    ${b.total?`<div class="q" style="margin-top:6px">예정 총액 ${won(b.total)}</div>`:""}${b.missing.length?`<div class="miss">누락: ${b.missing.map(esc).join(", ")} — 추가로 알려 주세요</div>`:""}`);return p}
+  if(b.type==="coverage"){const p=panel("카테고리 충족도");const c=document.createElement("div");c.className="cov";
+    b.rows.forEach(r=>{c.insertAdjacentHTML("beforeend",`<div class="covrow"><b>${esc(r.category)} ${r.need}종</b><div class="bar">${
+      [["eligible","ok"],["hold","hold"],["excluded","ex"]].filter(([k])=>r[k]).map(([k,cl])=>`<i class="${cl}" style="flex:${r[k]}"></i>`).join("")}</div>
+      <span>적격 ${r.eligible} · 보류 ${r.hold} · 제외 ${r.excluded} ${r.gap?'<span class="gap">· 부족</span>':""}</span></div>`)});p.append(c);return p}
+  if(b.type==="candidates")return candPanel(b.rows);
+  if(b.type==="cost")return costPanel(b);
+  if(b.type==="rfq"){const p=panel("견적 요청 초안",b.drafts.length+"건 · 미발송");b.drafts.forEach(d=>{
+    const txt=`${d.body}\n${d.common.map((q,i)=>`${i+1}. ${q}`).join("\n")}\n\n${d.items.map(i=>`■ ${i.name} (${i.option||"옵션 미확인"})\n${i.questions.map(q=>"- "+q).join("\n")}`).join("\n\n")}`;
+    const det=document.createElement("details");det.innerHTML=`<summary><b>${esc(d.supplier)}</b> · 후보 ${d.items.length}개</summary><button class="copy" type="button">복사</button><pre>${esc(txt)}</pre>`;
+    det.querySelector(".copy").onclick=e=>{navigator.clipboard?.writeText(txt);e.target.textContent="복사됨"};p.append(det)});return p}
+  if(b.type==="docs"){const p=panel("생성 문서");const d=document.createElement("div");d.className="docs";
+    b.items.forEach(i=>{d.insertAdjacentHTML("beforeend",`<a href="${esc(i.href)}" target="_blank" rel="noopener">${/Word/.test(i.label)?"⬇":"↗"} ${esc(i.label)}</a>`)});p.append(d);
+    $("#docs").innerHTML="";b.items.forEach(i=>$("#docs").insertAdjacentHTML("beforeend",`<a class="doclink" href="${esc(i.href)}" target="_blank" rel="noopener">${esc(i.label)}</a>`));return p}
+  if(b.type==="outline"){const p=panel("제안서 목차");p.insertAdjacentHTML("beforeend",`<ol class="outline">${b.items.map(x=>`<li>${esc(x.replace(/^\d+\.\s*/,""))}</li>`).join("")}</ol>`);return p}
+  const d=document.createElement("pre");d.textContent=JSON.stringify(b,null,2);return d;
+}
+function fmt(f,v){if(["budget_per_person","total_budget","min_online_price"].includes(f))return won(+v);if(f==="headcount")return (+v).toLocaleString()+"명";if(f==="vat_included")return v==="True"?"포함":"별도";return v}
+
+function candPanel(rows){
+  const p=panel("후보 판정",`${rows.length}개 · 클릭하면 항목별 근거`);
+  const counts={ALL:rows.length};rows.forEach(r=>counts[r.decision]=(counts[r.decision]||0)+1);
+  const f=document.createElement("div");f.className="filters";let cur="NOTEX";
+  const NAMES={NOTEX:"제외 숨김",ALL:"전체",ELIGIBLE:"적격",HOLD:"보류",EXCLUDED:"제외"};
+  const tb=document.createElement("tbody");
+  function draw(){tb.innerHTML="";rows.filter(r=>cur==="ALL"||(cur==="NOTEX"?r.decision!=="EXCLUDED":r.decision===cur)).forEach(r=>{
+    const tr=document.createElement("tr");tr.className="cand";
+    tr.innerHTML=`<td><span class="dec ${r.decision}">${{ELIGIBLE:"적격",HOLD:"보류",EXCLUDED:"제외"}[r.decision]}</span></td>
+     <td class="nm">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>`:esc(r.name)} ${r.is_sample?'<span class=tag>예시</span>':""}<small>${esc(r.supplier)} · ${esc(r.option||"옵션 미확인")}</small></td>
+     <td>${esc(r.category||"-")}</td><td class="num">${r.price?won(r.price):"미수집"}<div class=q>${esc(r.price_kind)}</div></td>
+     <td class="chips">${r.failed.map(x=>`<span class=f>✕ ${esc(x)}</span>`).join("")}${r.unknown.map(x=>`<span class=u>? ${esc(x)}</span>`).join("")}</td>`;
+    const dt=document.createElement("tr");dt.className="detail";dt.hidden=true;
+    dt.innerHTML=`<td colspan=5>${r.notes.length?`<div class="q" style="margin-bottom:6px">${r.notes.map(esc).join(" · ")}</div>`:""}<div class="ck">${r.checks.map(c=>`<div class="${c.status}"><b>${{PASS:"● 충족",FAIL:"✕ 위반",UNKNOWN:"? 미확인"}[c.status]}</b> ${esc(c.label)}<div class=q>기준 ${esc(c.expected)} · 실제 ${esc(c.actual||"없음")}${c.note?" · "+esc(c.note):""}</div></div>`).join("")}</div></td>`;
+    tr.onclick=e=>{if(e.target.tagName!=="A")dt.hidden=!dt.hidden};tb.append(tr,dt)})}
+  Object.keys(NAMES).forEach(k=>{if(k!=="NOTEX"&&!counts[k])return;const b=document.createElement("button");b.type="button";
+    b.textContent=NAMES[k]+(k==="NOTEX"?"":` ${counts[k]}`);b.setAttribute("aria-pressed",k===cur);
+    b.onclick=()=>{cur=k;f.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));draw()};f.append(b)});
+  const t=document.createElement("table");t.innerHTML="<thead><tr><th>판정</th><th>후보</th><th>분류</th><th class=num>관측가</th><th>막힌 항목</th></tr></thead>";t.append(tb);
+  p.append(f);const w=document.createElement("div");w.style.overflowX="auto";w.append(t);p.append(w);draw();return p;
+}
+
+function costPanel(b){
+  const p=panel("1인 비용 구조",b.budget?`예산 ${won(b.budget)}`:"");
+  const max=b.budget||Math.max(1,...b.lines.map(l=>l.amount||0));let acc=0;
+  const wf=document.createElement("div");wf.className="wf";
+  b.lines.forEach(l=>{const known=l.amount!=null;const left=acc/max*100;const w=known?l.amount/max*100:6;if(known)acc+=l.amount;
+    wf.insertAdjacentHTML("beforeend",`<div class="wfrow"><span>${esc(l.label)}</span><div class="wfbar"><i class="${known?"":"unk"}" style="left:${Math.min(left,100)}%;width:${w}%"></i></div><span class="num">${known?won(l.amount):'<span style="color:var(--hold)">미확인</span>'}</span></div>`)});
+  p.append(wf);
+  p.insertAdjacentHTML("beforeend",b.residual!=null?`<div class="residual">잔여액 ${won(b.residual)} (모든 항목 입력됨 — 입력값 기준, 견적 확정 아님)</div>`
+    :`<div class="residual unk">잔여액 확정 불가 — 미확인 ${b.unknown.length}개 (미확인 ≠ 0원) · 확인된 합계 ${won(b.known_total)}</div>`);
+  if(b.scenarios.length)p.insertAdjacentHTML("beforeend",`<table style="margin-top:10px"><thead><tr><th>가정: 공개가 = 매입가</th><th class=num>가정 매입가</th><th class=num>추가비용 전 차액</th><th>판단</th></tr></thead><tbody>${
+    b.scenarios.map(s=>`<tr><td>${esc(s.candidate)}</td><td class=num>${won(s.assumed_supply)}</td><td class="num ${s.gap_before_other_costs<0?"neg":""}">${s.gap_before_other_costs>0?"+":""}${won(s.gap_before_other_costs)}</td><td class=q>${esc(s.verdict)}</td></tr>`).join("")}</tbody></table>`);
+  if(b.notes.length)p.insertAdjacentHTML("beforeend",`<ul class="q" style="margin:10px 0 0;padding-left:18px">${b.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`);
+  return p;
+}
+</script>
+</body>
+</html>
