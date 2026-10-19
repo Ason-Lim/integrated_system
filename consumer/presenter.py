@@ -3,6 +3,7 @@
 블록 타입 (web/index.html 이 렌더링, 다른 채널도 같은 JSON 사용 가능)
   text           : 짧은 안내 문장 (굵게 **...** 지원)
   product_list   : 카드 목록 (배지·실구매가·단가·근거칩·미확인칩·출처·조회시각·링크)
+  comparison_pair: 2개씩 묶은 비교 카드 (각 카드에 reasoning·follow_up 칩 포함)
   notice         : 가격 기준 시각 / 예시 데이터 안내
   verdict        : "내 추천은 ○○!" 한 줄 결론
   clarify_form   : 빠진 조건을 묻는 선택형 질문 (라디오) + CTA
@@ -54,6 +55,68 @@ def card(so: ScoredOffer, rank: int) -> dict:
         "source": mall, "observed": when, "stale": stale, "url": o.url, "is_sample": o.is_sample,
         "cta": f"{mall}에서 보기" if o.url else "예시 데이터 (링크 없음)",
     }
+
+
+def _follow_up_chips(so: ScoredOffer) -> list[dict]:
+    """카드별 후속 질문 칩. 클릭 시 message 모드로 대화에 전송된다."""
+    chips: list[dict] = []
+    if so.offer.total_price is not None:
+        chips.append({"label": "이거 더 저렴한 곳 있어?", "value": f"{so.offer.title} 더 저렴한 곳"})
+    if so.offer.unit_price is not None:
+        chips.append({"label": "단가 비교해줘", "value": f"{so.offer.title} 단가 비교"})
+    if so.unverified:
+        chips.append({"label": "배송비 확인해줘", "value": f"{so.offer.title} 배송비 확인"})
+    if so.offer.mall:
+        chips.append({"label": "비슷한 상품 더 보여줘", "value": f"{so.offer.title} 비슷한 상품"})
+    return chips[:3]
+
+
+def _reasoning(so: ScoredOffer) -> str:
+    """카드 하단에 노출할 추천 이유 한 줄."""
+    if so.reason:
+        return so.reason
+    if so.evidence:
+        return f"{', '.join(so.evidence)} 근거로 추천했어요."
+    return "조건 적합도와 가격을 함께 고려했어요."
+
+
+def comparison_pair(items: list[ScoredOffer], start_rank: int = 1) -> list[dict]:
+    """상품 리스트를 2개씩 묶어 비교 카드 쌍을 만든다.
+
+    반환 구조 (각 원소가 하나의 comparison_pair 블록 data):
+      {
+        "pair_index": 0,
+        "cards": [
+          { ...card(so, rank)..., "reasoning": str, "follow_up": [{"label","value"}] },
+          { ...card(so, rank)..., "reasoning": str, "follow_up": [{"label","value"}] },
+        ],
+        "compare": True,          # 두 카드 비교 UI 표시 여부
+        "chips": [{"label","value"}],  # 쌍 단위 후속 질문 (선택)
+      }
+    마지막에 카드가 1장만 남으면 cards 길이가 1이 된다.
+    """
+    pairs: list[dict] = []
+    for i in range(0, len(items), 2):
+        chunk = items[i:i + 2]
+        cards = []
+        for j, so in enumerate(chunk):
+            c = card(so, start_rank + i + j)
+            c["reasoning"] = _reasoning(so)
+            c["follow_up"] = _follow_up_chips(so)
+            cards.append(c)
+        pair_chips: list[dict] = []
+        if len(cards) == 2:
+            pair_chips = [
+                {"label": "둘 중 뭐가 나아?", "value": f"{cards[0]['title']} vs {cards[1]['title']} 비교"},
+                {"label": "가격만 비교", "value": f"{cards[0]['title']} vs {cards[1]['title']} 가격 비교"},
+            ]
+        pairs.append({
+            "pair_index": i // 2,
+            "cards": cards,
+            "compare": len(cards) == 2,
+            "chips": pair_chips,
+        })
+    return pairs
 
 
 def budget_buckets(items: list[ScoredOffer]) -> list[dict]:
@@ -119,7 +182,11 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     head = f"{where}{' '.join(ctx) + ' ' if ctx else ''}**{product}** 중에는 이 {len(items)}가지를 추천해요."
 
     cards = [card(x, i + 1) for i, x in enumerate(items)]
-    blocks = [text_block(head), Block(type="product_list", data={"items": cards, "compare": len(cards) >= 2})]
+    blocks = [text_block(head)]
+    if len(cards) >= 2:
+        blocks.append(Block(type="comparison_pair", data={"pairs": comparison_pair(items)}))
+    else:
+        blocks.append(Block(type="product_list", data={"items": cards, "compare": False}))
 
     stale = any(c["stale"] for c in cards)
     note = "가격·리뷰 수는 표시된 조회 시각 기준이며 현재 가격·재고와 다를 수 있어요."
