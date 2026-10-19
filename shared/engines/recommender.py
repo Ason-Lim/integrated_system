@@ -71,7 +71,9 @@ class Recommender:
                 x.not_rankable_reason = x.not_rankable_reason or "구매조건 근거 부족"
         ranked.sort(key=lambda x: (not x.rankable, x.decision["status"] != "RANKABLE"))
         n = max(1, min(20, int(intent.slots.get("quantity") or limit)))
-        top = ranked[:n]
+        # NOT_RANKABLE 은 순위 비교에서 제외하고, 랭킹 가능 후보가 없을 때만 참고용으로 노출한다.
+        rankable = [x for x in ranked if x.rankable]
+        top = (rankable or ranked)[:n]
         assign_badges(top)
         for so in top:
             so.reason = so.reason or compose_reason(so)

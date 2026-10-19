@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 
+from shared.assurance import assess
 from shared.models import Intent, Offer, ScoredOffer
 
 
@@ -55,9 +56,11 @@ def rank(offers: list[Offer], intent: Intent, query: str) -> list[ScoredOffer]:
         if s.get("priority") == "quality" and o.original_price is None and (o.rating or 0) >= 4.7:
             score += 3
         so = ScoredOffer(offer=o, score=round(score, 1), evidence=ev, unverified=un)
-        if o.rankability == "NOT_RANKABLE":
+        # 결정 가능성 판정: 총비용/배송비 미확정은 점수 하향이 아니라 랭킹 분리
+        so.decision = assess(o)
+        if so.decision["status"] != "RANKABLE" or o.rankability == "NOT_RANKABLE":
             so.rankable = False
-            so.not_rankable_reason = "판매처 근거로 구매조건 확정 불가"
+            so.not_rankable_reason = so.not_rankable_reason or "판매처 근거로 구매조건 확정 불가"
         out.append(so)
     out.sort(key=lambda x: (not x.rankable, -x.score))
     return out

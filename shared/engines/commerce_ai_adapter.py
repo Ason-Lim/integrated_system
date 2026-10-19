@@ -12,6 +12,7 @@ import importlib
 import logging
 import sys
 
+from shared.assurance import assess
 from shared.config import Settings, get_settings
 from shared.models import Intent, Offer, ScoredOffer
 
@@ -66,7 +67,8 @@ class CommerceAIEngine:
         so = ScoredOffer(offer=offer, score=float(it[score_key]) if score_key else 0, score_source=score_key or "unavailable", reason=reason,
                          evidence=[x for x in (it.get("recommendation_reason_1"), it.get("recommendation_reason_2")) if x],
                          engine="commerce_ai_v8")
-        if offer.rankability == "NOT_RANKABLE":
+        so.decision = assess(offer)
+        if so.decision["status"] != "RANKABLE" or offer.rankability == "NOT_RANKABLE":
             so.rankable = False
-            so.not_rankable_reason = "판매처 근거로 구매조건 확정 불가"
+            so.not_rankable_reason = so.not_rankable_reason or "판매처 근거로 구매조건 확정 불가"
         return so

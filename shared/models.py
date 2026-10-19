@@ -44,6 +44,11 @@ class Offer(BaseModel):
     delivery_terms: str | None = None
     is_sponsored: bool = False
     source_refs: list[str] = Field(default_factory=list)
+    # ── 계층 속성 (HASTE, arXiv:2610.17368) ──
+    # 품목 → 품종 → 등급 → 규격. 카테고리 ID 만으로는 장기꼬리 상품을 비교할 수 없다.
+    item: str | None = None                         # 품목 (사과, 배추, 참기름 ...)
+    variety: str | None = None                      # 품종 (홍로, 부사, 시나노골드 ...)
+    spec_grade: str | None = None                   # 규격 (5kg, 10개입, 300ml 2병 ...)
     # ── 판매처 결정 가능성 (Merchant Decision Sufficiency) ──
     # 각 항목은 판매처가 공개한 근거로 확정 가능한지 여부. None = 미확인.
     total_cost_determinate: bool | None = None      # 총비용(배송·수수료 포함) 확정 가능
@@ -51,7 +56,7 @@ class Offer(BaseModel):
     service_date: str | None = None                 # 서비스/배송 예정일
     evidence_coverage: float | None = None          # 필수조건 근거 coverage (0~1)
     missing_terms: list[str] = Field(default_factory=list)  # 확정 불가 항목 키
-    rankability: str = "UNKNOWN"                    # DETERMINATE | INDETERMINATE | UNKNOWN | NOT_RANKABLE
+    rankability: Literal["DETERMINATE", "INDETERMINATE", "UNKNOWN", "NOT_RANKABLE"] = "UNKNOWN"
     raw: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
     @property

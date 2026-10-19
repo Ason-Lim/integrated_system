@@ -11,6 +11,10 @@ POLICY_VERSION = "kop-local-2026-10-16-v2"
 
 # 구매 mandate 의 필수 조건 — 판매처 근거로 확정 가능해야 한다
 MANDATE_TERMS = ("total_cost", "return_terms", "service_date", "variant_id")
+# 이 항목이 UNKNOWN 이면 점수 하향이 아니라 랭킹 분리(NOT_RANKABLE) 대상이다.
+HARD_TERMS = ("total_cost",)
+# 계층 속성 (HASTE) — 장기꼬리 상품 비교에 필요한 최소 속성
+HIERARCHY_TERMS = ("item", "variety", "grade", "spec_grade")
 
 
 def _term_state(offer: Offer, term: str) -> str:
@@ -38,20 +42,36 @@ def _term_state(offer: Offer, term: str) -> str:
     return "UNKNOWN"
 
 
+def hierarchy_coverage(offer: Offer) -> dict:
+    """계층 속성(품목→품종→등급→규격) 보존 여부를 계산한다."""
+    present = [t for t in HIERARCHY_TERMS if getattr(offer, t)]
+    missing = [t for t in HIERARCHY_TERMS if not getattr(offer, t)]
+    return {"present": present, "missing": missing,
+            "coverage": round(len(present) / len(HIERARCHY_TERMS), 3)}
+
+
 def decision_sufficiency(offer: Offer) -> dict:
-    """판매처 근거로 구매조건이 확정 가능한지 평가한다."""
+    """판매처 근거로 구매조건이 확정 가능한지 평가한다.
+
+    - HARD_TERMS(총비용)가 UNKNOWN/INDETERMINATE 이면 NOT_RANKABLE 로 분리한다.
+    - 그 외 필수조건이 미확정이면 INDETERMINATE/UNKNOWN 으로 표시한다.
+    """
     states = {t: _term_state(offer, t) for t in MANDATE_TERMS}
     determinate = [t for t, s in states.items() if s == "DETERMINATE"]
     missing = [t for t, s in states.items() if s != "DETERMINATE"]
     coverage = len(determinate) / len(MANDATE_TERMS)
-    if any(s == "INDETERMINATE" for s in states.values()):
+    hard_unknown = [t for t in HARD_TERMS if states.get(t) != "DETERMINATE"]
+    if hard_unknown:
+        rankability = "NOT_RANKABLE"
+    elif any(s == "INDETERMINATE" for s in states.values()):
         rankability = "INDETERMINATE"
     elif missing:
         rankability = "UNKNOWN"
     else:
         rankability = "DETERMINATE"
     return {"states": states, "coverage": round(coverage, 3), "missing": missing,
-            "rankability": rankability}
+            "hard_unknown": hard_unknown, "rankability": rankability,
+            "hierarchy": hierarchy_coverage(offer)}
 
 
 def assess(offer: Offer, *, now=None, max_age_hours=24):
@@ -76,6 +96,9 @@ def assess(offer: Offer, *, now=None, max_age_hours=24):
     # 근거 coverage 부족은 점수 하향이 아니라 랭킹 분리 사유
     if suff["rankability"] != "DETERMINATE":
         gaps.extend(f"term:{t}" for t in suff["missing"])
+    # 총비용 확정 불가 → 무조건 NOT_RANKABLE
+    if suff["rankability"] == "NOT_RANKABLE":
+        gaps.extend(f"hard:{t}" for t in suff["hard_unknown"])
     return {"policy_version": POLICY_VERSION, "status": "NOT_RANKABLE" if gaps else "RANKABLE",
             "missing": gaps, "next_evidence": list(gaps),
             "observed_at": observed.isoformat(), "scope": "local_candidate_comparison",
