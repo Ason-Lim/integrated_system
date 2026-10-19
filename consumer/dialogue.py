@@ -4,6 +4,8 @@
 추천 카드 '아래'에서 선택형으로 묻는다. 한 번에 최대 2개 질문.
 
 UNDERSTAND ──(상품 모름)──▶ CLARIFY ──▶ RECOMMEND ──▶ REFINE ──▶ RECOMMEND ...
+                                              │
+                                              └─(follow_up 칩)──▶ EXPLORE ──▶ RECOMMEND ...
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ class Stage(str, Enum):
     CLARIFY = "clarify"
     RECOMMEND = "recommend"
     REFINE = "refine"
+    EXPLORE = "explore"
 
 
 @dataclass
@@ -32,6 +35,7 @@ class Session:
     slots: dict = field(default_factory=dict)
     turns: int = 0
     last_items: list = field(default_factory=list)
+    last_query: str | None = None
     # 레시피 멀티턴 상태
     recipe_title: str | None = None
     recipe_ingredients: list[dict] = field(default_factory=list)  # 누적 재료
@@ -45,6 +49,34 @@ REFINE_CHIPS = {
     "프리미엄으로": {"priority": "quality"},
     "선물용으로": {"purpose": "gift"},
 }
+
+# follow_up 칩 → EXPLORE 액션 (LLM 없이 규칙 기반 처리)
+# presenter._follow_up_chips / comparison_pair 의 value 형식과 매칭된다.
+EXPLORE_PATTERNS: list[tuple[str, str]] = [
+    ("더 저렴한 곳", "cheaper"),
+    ("단가 비교", "unit_compare"),
+    ("배송비 확인", "shipping"),
+    ("비슷한 상품", "similar"),
+    ("가격 비교", "pair_price"),
+    ("비교", "pair_compare"),
+]
+
+
+def _explore_action(text: str) -> str | None:
+    """follow_up 칩 문구에서 EXPLORE 액션을 판별한다."""
+    for needle, action in EXPLORE_PATTERNS:
+        if needle in text:
+            return action
+    return None
+
+
+def _match_item(items: list, text: str):
+    """칩 문구에 포함된 상품 제목으로 last_items 에서 항목을 찾는다."""
+    for so in items:
+        title = getattr(so.offer, "title", "") or ""
+        if title and title in text:
+            return so
+    return None
 
 
 class DialogueManager:
@@ -67,6 +99,14 @@ class DialogueManager:
                answers: dict | None = None, chip: str | None = None) -> dict:
         s = self.session(sid)
         s.turns += 1
+
+        # follow_up 칩 → EXPLORE (LLM 호출 없이 규칙 기반 즉시 응답)
+        explore_text = (message or chip or "").strip()
+        action = _explore_action(explore_text) if explore_text else None
+        if action and s.last_items:
+            s.stage = Stage.EXPLORE
+            return self._explore(s, action, explore_text)
+
         if chip and chip in REFINE_CHIPS:
             s.slots.update(REFINE_CHIPS[chip])
             s.stage = Stage.REFINE
@@ -105,8 +145,128 @@ class DialogueManager:
                 pass
         s.stage = Stage.RECOMMEND
         s.last_items = items
+        s.last_query = query
         blocks = presenter.recommendation_blocks(intent, items, active_malls=self.rec.markets.active)
         return self._reply(s, blocks, intent=intent)
+
+    # ── EXPLORE: follow_up 칩에 대한 규칙 기반 즉시 응답 ─────────────
+    def _explore(self, s: Session, action: str, text: str) -> dict:
+        items = s.last_items
+        target = _match_item(items, text)
+
+        if action == "cheaper":
+            return self._explore_cheaper(s, target)
+        if action == "unit_compare":
+            return self._explore_unit(s, target)
+        if action == "shipping":
+            return self._explore_shipping(s, target)
+        if action == "similar":
+            return self._explore_similar(s, target)
+        if action in ("pair_compare", "pair_price"):
+            return self._explore_pair(s, action == "pair_price")
+
+        # 매칭 실패 시 안전한 안내
+        return self._reply(s, [
+            presenter.text_block("어떤 상품을 기준으로 볼지 알려주시면 바로 비교해 드릴게요."),
+            Block(type="chips", data={"items": ["더 저렴한 것", "후기 많은 순"], "mode": "chip"}),
+        ])
+
+    def _explore_cheaper(self, s: Session, target) -> dict:
+        items = s.last_items
+        if target is None:
+            target = items[0]
+        base = target.offer.total_price or target.offer.price or 0
+        cheaper = [x for x in items if (x.offer.total_price or x.offer.price or 0) < base]
+        cheaper.sort(key=lambda x: (x.offer.total_price or x.offer.price or 0))
+        if not cheaper:
+            return self._reply(s, [
+                presenter.text_block(f"**{target.offer.title}**보다 저렴한 후보는 지금 목록에 없어요. "
+                                     "예산 범위를 넓히거나 구매처 제한을 풀면 더 찾아볼 수 있어요."),
+                Block(type="chips", data={"items": ["더 저렴한 것", "프리미엄으로"], "mode": "chip"}),
+            ])
+        head = f"**{target.offer.title}**보다 저렴한 후보 {len(cheaper)}개를 찾았어요."
+        blocks = [presenter.text_block(head)]
+        if len(cheaper) >= 2:
+            blocks.append(Block(type="comparison_pair", data={"pairs": presenter.comparison_pair(cheaper[:2])}))
+        else:
+            blocks.append(Block(type="product_list",
+                                data={"items": [presenter.card(cheaper[0], 1)], "compare": False}))
+        blocks.append(Block(type="chips", data={"items": ["단가 비교해줘", "배송비 확인해줘"], "mode": "message"}))
+        return self._reply(s, blocks)
+
+    def _explore_unit(self, s: Session, target) -> dict:
+        items = s.last_items
+        if target is None:
+            target = items[0]
+        with_unit = [x for x in items if x.offer.unit_price is not None]
+        if not with_unit:
+            return self._reply(s, [
+                presenter.text_block("단가를 계산할 수 있는 상품이 없어요. 용량·수량 정보가 있는 상품으로 다시 찾아볼까요?"),
+            ])
+        with_unit.sort(key=lambda x: x.offer.unit_price)
+        lines = [f"- **{x.offer.title}**: {presenter.won(x.offer.unit_price)}/단위" for x in with_unit[:5]]
+        return self._reply(s, [
+            presenter.text_block(f"단가 기준 정렬 결과예요.\n" + "\n".join(lines)),
+            Block(type="chips", data={"items": ["더 저렴한 것", "비슷한 상품 더 보여줘"], "mode": "message"}),
+        ])
+
+    def _explore_shipping(self, s: Session, target) -> dict:
+        items = s.last_items
+        if target is None:
+            target = items[0]
+        o = target.offer
+        fee = "미확인" if o.shipping_fee is None else presenter.won(o.shipping_fee)
+        total = "미확인" if o.total_price is None else presenter.won(o.total_price)
+        return self._reply(s, [
+            presenter.text_block(
+                f"**{o.title}**\n- 상품가: {presenter.won(o.price)}\n- 배송비: {fee}\n- 실구매가: {total}"
+            ),
+            Block(type="chips", data={"items": ["더 저렴한 것", "단가 비교해줘"], "mode": "message"}),
+        ])
+
+    def _explore_similar(self, s: Session, target) -> dict:
+        items = s.last_items
+        if target is None:
+            target = items[0]
+        others = [x for x in items if x is not target]
+        if not others:
+            return self._reply(s, [
+                presenter.text_block("지금 목록에는 비슷한 후보가 더 없어요. 조건을 조금 바꿔 다시 찾아볼까요?"),
+                Block(type="chips", data={"items": ["더 저렴한 것", "프리미엄으로"], "mode": "chip"}),
+            ])
+        head = f"**{target.offer.title}**와 함께 볼 만한 후보예요."
+        blocks = [presenter.text_block(head)]
+        if len(others) >= 2:
+            blocks.append(Block(type="comparison_pair", data={"pairs": presenter.comparison_pair(others[:2])}))
+        else:
+            blocks.append(Block(type="product_list",
+                                data={"items": [presenter.card(others[0], 1)], "compare": False}))
+        blocks.append(Block(type="chips", data={"items": ["더 저렴한 것", "후기 많은 순"], "mode": "chip"}))
+        return self._reply(s, blocks)
+
+    def _explore_pair(self, s: Session, price_only: bool) -> dict:
+        items = s.last_items[:2]
+        if len(items) < 2:
+            return self._reply(s, [
+                presenter.text_block("비교할 후보가 2개 이상 필요해요. 조건을 조금 넓혀 다시 찾아볼까요?"),
+            ])
+        a, b = items
+        pa = a.offer.total_price or a.offer.price
+        pb = b.offer.total_price or b.offer.price
+        lines = [f"- **{a.offer.title}**: {presenter.won(pa)}"]
+        if not price_only:
+            lines.append(f"  - 근거: {', '.join(a.evidence) if a.evidence else '정보 없음'}")
+        lines.append(f"- **{b.offer.title}**: {presenter.won(pb)}")
+        if not price_only:
+            lines.append(f"  - 근거: {', '.join(b.evidence) if b.evidence else '정보 없음'}")
+        if pa is not None and pb is not None:
+            diff = abs(pa - pb)
+            cheaper = a if pa < pb else b
+            lines.append(f"\n가격 차이는 **{presenter.won(diff)}**이고, 더 저렴한 쪽은 **{cheaper.offer.title}**이에요.")
+        return self._reply(s, [
+            presenter.text_block("두 후보를 비교했어요.\n" + "\n".join(lines)),
+            Block(type="chips", data={"items": ["더 저렴한 것", "단가 비교해줘"], "mode": "message"}),
+        ])
 
     def _reply(self, s: Session, blocks: list[Block], intent: Intent | None = None) -> dict:
         return {
