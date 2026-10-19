@@ -85,6 +85,10 @@ class Candidate(BaseModel):
     notes: list[str] = Field(default_factory=list)
     is_sample: bool = False                # 예시 데이터 (제안서에서 제외)
     source: str = "evidence_bundle"        # evidence_bundle | core_observation | market_search | manual
+    # ── Merchant Decision Sufficiency (shadow) ──
+    rankability: str = "UNKNOWN"           # DETERMINATE | INDETERMINATE | UNKNOWN | NOT_RANKABLE
+    evidence_coverage: float | None = None
+    missing_terms: list[str] = Field(default_factory=list)
 
 
 class Check(BaseModel):

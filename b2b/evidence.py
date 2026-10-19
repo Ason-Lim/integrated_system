@@ -220,6 +220,14 @@ def evaluate(c: Candidate, req: BidRequirement, today: date | None = None, max_a
 
     decision = "EXCLUDED" if any(x.status == "FAIL" for x in checks) else \
         "HOLD" if any(x.status == "UNKNOWN" for x in checks) else "ELIGIBLE"
+    # Merchant Decision Sufficiency: 필수조건 근거 coverage 를 후보에 기록 (shadow)
+    required = ("category", "online_value", "spec", "quote", "delivery", "exchange", "stock")
+    determinate = [x for x in checks if x.key in required and x.status == "PASS"]
+    missing = [x.key for x in checks if x.key in required and x.status != "PASS"]
+    c.evidence_coverage = round(len(determinate) / len(required), 3)
+    c.missing_terms = missing
+    c.rankability = "DETERMINATE" if not missing else \
+        "INDETERMINATE" if any(x.status == "FAIL" for x in checks if x.key in required) else "UNKNOWN"
     return Evaluation(candidate=c, decision=decision, checks=checks)
 
 

@@ -65,6 +65,7 @@ def coverage(req: BidRequirement, evals) -> list[dict]:
             "eligible": sum(e.decision == "ELIGIBLE" for e in mine),
             "hold": sum(e.decision == "HOLD" for e in mine),
             "excluded": sum(e.decision == "EXCLUDED" for e in mine),
+            "not_rankable": sum(e.candidate.rankability == "UNKNOWN" for e in mine),
             "gap": max(0, need.count - sum(e.decision != "EXCLUDED" for e in mine)),
         })
     return rows

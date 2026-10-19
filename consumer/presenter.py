@@ -59,6 +59,10 @@ def card(so: ScoredOffer, rank: int) -> dict:
         "spec": o.spec, "reason": so.reason, "evidence": so.evidence, "unverified": so.unverified,
         "source": mall, "observed": when, "stale": stale, "url": o.url, "is_sample": o.is_sample,
         "cta": f"{mall}에서 보기" if o.url else "예시 데이터 (링크 없음)",
+        # Merchant Decision Sufficiency (shadow)
+        "rankable": so.rankable, "not_rankable_reason": so.not_rankable_reason,
+        "rankability": o.rankability, "evidence_coverage": o.evidence_coverage,
+        "missing_terms": o.missing_terms,
     }
 
 
@@ -246,11 +250,19 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     head = f"{where}{' '.join(ctx) + ' ' if ctx else ''}**{product}** 중에는 이 {len(items)}가지를 추천해요."
 
     cards = [card(x, i + 1) for i, x in enumerate(items)]
+    rankable_items = [x for x in items if x.rankable]
+    not_rankable = [c for c in cards if not c["rankable"]]
     blocks = [text_block(head)]
-    if len(cards) >= 2:
-        blocks.append(Block(type="comparison_pair", data={"pairs": comparison_pair(items)}))
-    else:
-        blocks.append(Block(type="product_list", data={"items": cards, "compare": False}))
+    if len(rankable_items) >= 2:
+        blocks.append(Block(type="comparison_pair", data={"pairs": comparison_pair(rankable_items)}))
+    elif rankable_items:
+        blocks.append(Block(type="product_list",
+                            data={"items": [card(rankable_items[0], 1)], "compare": False}))
+    if not_rankable:
+        blocks.append(notice_block(
+            f"구매조건(총비용·반품·서비스일·옵션) 근거가 부족한 후보 {len(not_rankable)}개는 "
+            "순위 비교에서 분리했어요. 아래 목록은 참고용입니다.", "warn"))
+        blocks.append(Block(type="product_list", data={"items": not_rankable, "compare": False}))
 
     stale = any(c["stale"] for c in cards)
     note = "가격·리뷰 수는 표시된 조회 시각 기준이며 현재 가격·재고와 다를 수 있어요."
@@ -260,10 +272,10 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
         note = "지금은 **예시 데이터**로 동작 중이에요 (마켓 API 키 미설정). " + note
     blocks.append(notice_block(note, "warn" if stale or any(c["is_sample"] for c in cards) else "info"))
 
-    top = items[0]
+    top = rankable_items[0] if rankable_items else items[0]
     why = (f"{', '.join(top.evidence)}로 근거가 가장 탄탄하고 조건에도 잘 맞아요" if top.evidence
            else "조건 적합도와 가격을 함께 봤어요")
-    if top.decision.get("status") == "RANKABLE":
+    if top.rankable and top.decision.get("status") == "RANKABLE":  # type: ignore[union-attr]
         blocks.append(Block(type="verdict", data={"md": f"우선 비교할 후보는 **{top.offer.title}**입니다. {why}."}))
     else:
         blocks.append(notice_block("현재는 탐색 후보입니다. 옵션·배송·반품·출처가 확인되기 전에는 최종 추천을 확정하지 않습니다.", "warn"))

@@ -44,6 +44,14 @@ class Offer(BaseModel):
     delivery_terms: str | None = None
     is_sponsored: bool = False
     source_refs: list[str] = Field(default_factory=list)
+    # ── 판매처 결정 가능성 (Merchant Decision Sufficiency) ──
+    # 각 항목은 판매처가 공개한 근거로 확정 가능한지 여부. None = 미확인.
+    total_cost_determinate: bool | None = None      # 총비용(배송·수수료 포함) 확정 가능
+    return_terms: str | None = None                 # 반품/취소 조건 원문
+    service_date: str | None = None                 # 서비스/배송 예정일
+    evidence_coverage: float | None = None          # 필수조건 근거 coverage (0~1)
+    missing_terms: list[str] = Field(default_factory=list)  # 확정 불가 항목 키
+    rankability: str = "UNKNOWN"                    # DETERMINATE | INDETERMINATE | UNKNOWN | NOT_RANKABLE
     raw: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
     @property
@@ -66,6 +74,12 @@ class Intent(BaseModel):
     slots: dict[str, Any] = Field(default_factory=dict)
     confidence: float = 0.0
     source: str = "rule"                        # rule | llm | merged
+    # ── Decision Freshness Ledger (shadow) ──
+    decision_time: datetime | None = None
+    evidence_time: datetime | None = None
+    intended_action_time: datetime | None = None
+    revision_deadline: datetime | None = None
+    watch_conditions: list[str] = Field(default_factory=list)
 
 
 class ScoredOffer(BaseModel):
@@ -78,6 +92,8 @@ class ScoredOffer(BaseModel):
     engine: str = "simple_ranker"
     score_source: str = "simple_ranker"
     decision: dict[str, Any] = Field(default_factory=dict)
+    rankable: bool = True                                  # False → 비교·순위 대상 아님
+    not_rankable_reason: str | None = None
 
 
 # ── 화면 블록 (server-driven UI) ──────────────────────────────

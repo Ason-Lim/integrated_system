@@ -283,6 +283,8 @@ class Console:
             rows.append({"decision": e.decision, "name": c.name, "supplier": c.supplier, "category": c.category,
                          "option": c.option, "price": c.observed_price, "price_kind": c.price_kind, "url": c.url,
                          "is_sample": c.is_sample, "notes": c.notes,
+                         "rankability": c.rankability, "evidence_coverage": c.evidence_coverage,
+                         "missing_terms": c.missing_terms,
                          "failed": [x.label for x in e.failed], "unknown": [x.label for x in e.unknown],
                          "checks": [{"label": x.label, "status": x.status, "expected": str(x.expected or ""),
                                      "actual": str(x.actual or ""), "note": x.note} for x in e.checks]})

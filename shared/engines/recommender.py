@@ -66,7 +66,10 @@ class Recommender:
                 x.decision["missing"].append("allergen_source_verification")
                 x.decision["next_evidence"].append("allergen_source_verification")
                 x.unverified.append("알레르기 성분·교차오염 원문 확인")
-        ranked.sort(key=lambda x: x.decision["status"] != "RANKABLE")
+            if x.decision["status"] != "RANKABLE":
+                x.rankable = False
+                x.not_rankable_reason = x.not_rankable_reason or "구매조건 근거 부족"
+        ranked.sort(key=lambda x: (not x.rankable, x.decision["status"] != "RANKABLE"))
         n = max(1, min(20, int(intent.slots.get("quantity") or limit)))
         top = ranked[:n]
         assign_badges(top)
@@ -100,13 +103,15 @@ def apply_budget(items: list[ScoredOffer], intent: Intent) -> list[ScoredOffer]:
 def assign_badges(items: list[ScoredOffer]) -> None:
     if not items:
         return
-    items[0].badges.append("1순위 추천")
-    priced = [x for x in items if x.offer.total_price is not None]
+    rankable = [x for x in items if x.rankable]
+    if rankable:
+        rankable[0].badges.append("1순위 추천")
+    priced = [x for x in items if x.rankable and x.offer.total_price is not None]
     if len(priced) >= 2:
         cheapest = min(priced, key=lambda x: x.offer.total_price)
         if cheapest is not items[0]:
             cheapest.badges.append("표시 총액 낮음")
-    reviewed = [x for x in items if x.offer.review_count]
+    reviewed = [x for x in items if x.rankable and x.offer.review_count]
     if len(reviewed) >= 2:
         most = max(reviewed, key=lambda x: x.offer.review_count)
         if not most.badges:
@@ -117,6 +122,8 @@ def assign_badges(items: list[ScoredOffer]) -> None:
             pct = round((o.original_price - o.price) / o.original_price * 100)
             if pct >= 5:
                 x.badges.append(f"{pct}% 할인")
+        if not x.rankable:
+            x.badges.append("비교 불가")
 
 
 def compose_reason(so: ScoredOffer) -> str:

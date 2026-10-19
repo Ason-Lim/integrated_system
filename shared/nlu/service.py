@@ -15,6 +15,7 @@ import sys
 from shared.config import Settings, get_settings
 from shared.models import Intent
 from shared.nlu import rule_nlu
+from shared.query_expansion import filter_expansion
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,12 @@ class NLUService:
                     for k in RULE_AUTHORITATIVE:
                         if k in rule.slots:
                             slots[k] = rule.slots[k]
+                    # SAFE-QE: LLM 확장어 중 원문 근거 없는 속성은 요구로 승격하지 않는다
+                    if slots.get("product"):
+                        exp = filter_expansion(text, str(slots["product"]).split(), text)
+                        slots["_expansion"] = exp
+                        if exp["dropped"]:
+                            slots["product"] = " ".join([str(slots["product"])] + exp["kept"]).strip()
                     intent = Intent(action=r["action_intent"], context=r.get("context_intent") or rule.context,
                                     slots=slots, confidence=float(r.get("confidence") or 0), source="merged")
             except Exception as e:

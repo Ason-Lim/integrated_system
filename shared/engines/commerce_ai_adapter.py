@@ -63,6 +63,10 @@ class CommerceAIEngine:
         score_key = next((k for k in ("v7_final_score", "final_recommendation_score", "score")
                           if isinstance(it.get(k), (int, float)) and not isinstance(it[k], bool)), None)
         reason = it.get("recommendation_reason") or ""
-        return ScoredOffer(offer=offer, score=float(it[score_key]) if score_key else 0, score_source=score_key or "unavailable", reason=reason,
-                           evidence=[x for x in (it.get("recommendation_reason_1"), it.get("recommendation_reason_2")) if x],
-                           engine="commerce_ai_v8")
+        so = ScoredOffer(offer=offer, score=float(it[score_key]) if score_key else 0, score_source=score_key or "unavailable", reason=reason,
+                         evidence=[x for x in (it.get("recommendation_reason_1"), it.get("recommendation_reason_2")) if x],
+                         engine="commerce_ai_v8")
+        if offer.rankability == "NOT_RANKABLE":
+            so.rankable = False
+            so.not_rankable_reason = "판매처 근거로 구매조건 확정 불가"
+        return so

@@ -27,6 +27,10 @@ offer_observation = Table(
     Column("url", Text),
     Column("is_sample", Integer, default=0),
     Column("observed_at", DateTime(timezone=True), default=now_utc),
+    # Merchant Decision Sufficiency (shadow)
+    Column("rankability", String(16)),        # DETERMINATE | INDETERMINATE | UNKNOWN | NOT_RANKABLE
+    Column("evidence_coverage", Float),
+    Column("missing_terms", JSON),
 )
 
 search_log = Table(
@@ -40,6 +44,12 @@ search_log = Table(
     Column("result_count", Integer),
     Column("engine", String(32)),
     Column("created_at", DateTime(timezone=True), default=now_utc),
+    # Decision Freshness Ledger (shadow)
+    Column("decision_time", DateTime(timezone=True)),
+    Column("evidence_time", DateTime(timezone=True)),
+    Column("intended_action_time", DateTime(timezone=True)),
+    Column("revision_deadline", DateTime(timezone=True)),
+    Column("watch_conditions", JSON),
 )
 
 click_log = Table(
@@ -64,7 +74,9 @@ def engine(url: str | None = None):
 
 def record_offers(offers: list[Offer]) -> None:
     rows = [dict(mall=o.mall, mall_product_id=o.mall_product_id, title=o.title, price=o.price,
-                 shipping_fee=o.shipping_fee, url=o.url, is_sample=int(o.is_sample), observed_at=o.observed_at)
+                 shipping_fee=o.shipping_fee, url=o.url, is_sample=int(o.is_sample), observed_at=o.observed_at,
+                 rankability=o.rankability, evidence_coverage=o.evidence_coverage,
+                 missing_terms=o.missing_terms or None)
             for o in offers]
     if rows:
         with engine().begin() as c:
@@ -75,7 +87,10 @@ def log_search(session_id: str, query: str, intent: Intent, count: int, engine_n
     with engine().begin() as c:
         c.execute(insert(search_log).values(
             session_id=session_id, query=query, action=intent.action, context=intent.context,
-            slots=json.loads(json.dumps(intent.slots, ensure_ascii=False)), result_count=count, engine=engine_name))
+            slots=json.loads(json.dumps(intent.slots, ensure_ascii=False)), result_count=count, engine=engine_name,
+            decision_time=intent.decision_time, evidence_time=intent.evidence_time,
+            intended_action_time=intent.intended_action_time, revision_deadline=intent.revision_deadline,
+            watch_conditions=intent.watch_conditions or None))
 
 
 def log_click(session_id: str, mall: str, pid: str, rank: int, score: float) -> None:

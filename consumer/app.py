@@ -83,6 +83,23 @@ def health():
     return {"status": "ok", "nlu": dm.nlu.mode, "engine": dm.rec.mode, "markets": dm.rec.markets.active}
 
 
+@app.get("/api/decision/ledger/{sid}")
+def decision_ledger(sid: str):
+    """세션의 Decision Freshness Ledger 조회 (shadow)."""
+    s = dm.sessions.get(sid)
+    if not s or not s.ledger:
+        return {"session_id": sid, "ledger": None}
+    e = s.ledger
+    return {"session_id": sid, "ledger": {
+        "decision_time": e.decision_time.isoformat(),
+        "evidence_time": e.evidence_time.isoformat(),
+        "intended_action_time": e.intended_action_time.isoformat(),
+        "revision_deadline": e.revision_deadline.isoformat(),
+        "watch_conditions": e.watch_conditions,
+        "snapshot_keys": list(e.snapshot.keys()),
+    }}
+
+
 @app.post("/api/recipe/plan")
 def recipe_plan(body: "RecipePlan"):
     return body.evaluate()

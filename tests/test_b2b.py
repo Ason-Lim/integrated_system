@@ -97,3 +97,12 @@ def test_polish_rejects_new_numbers(monkeypatch):
 
 def test_category_need_model():
     assert CategoryNeed(name="식품", count=2).count == 2
+
+
+def test_candidate_records_evidence_coverage():
+    req = parse(IBK)
+    ev = evidence.evaluate(_full(), req, TODAY)
+    assert ev.candidate.evidence_coverage is not None
+    assert ev.candidate.rankability in ("DETERMINATE", "INDETERMINATE", "UNKNOWN")
+    hold = evidence.evaluate(_full(shipping_cost=None), req, TODAY)
+    assert hold.candidate.missing_terms

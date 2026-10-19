@@ -17,6 +17,7 @@ from shared.engines.recommender import Recommender
 from shared.models import Block, Intent
 from shared.nlu.service import NLUService
 from shared import store
+from shared.decision_ledger import LedgerEntry, invalidated, open_entry
 from consumer import presenter
 
 
@@ -42,6 +43,8 @@ class Session:
     recipe_mode: bool = False
     # GeoIP 로 판별한 클라이언트 국가 코드 (ISO 3166-1 alpha-2). 미확인 시 None.
     country_code: str | None = None
+    # Decision Freshness Ledger (shadow)
+    ledger: LedgerEntry | None = None
 
 
 # 빠른 응답 칩 → 슬롯 변경 (서버가 해석, LLM 불필요)
@@ -142,6 +145,8 @@ class DialogueManager:
             return self._reply(s, presenter.ask_product_blocks(intent))
 
         query, items = self.rec.recommend(intent, session_id=s.id)
+        # Decision Freshness Ledger: 추천 시점·근거 시점·실행 예정 시점·재검토 마감 기록
+        s.ledger = open_entry(intent, [x.offer for x in items])
         if self.persist:
             try:
                 store.record_offers([x.offer for x in items])
@@ -275,8 +280,18 @@ class DialogueManager:
         ])
 
     def _reply(self, s: Session, blocks: list[Block], intent: Intent | None = None) -> dict:
+        ledger = None
+        if s.ledger:
+            ledger = {
+                "decision_time": s.ledger.decision_time.isoformat(),
+                "evidence_time": s.ledger.evidence_time.isoformat(),
+                "intended_action_time": s.ledger.intended_action_time.isoformat(),
+                "revision_deadline": s.ledger.revision_deadline.isoformat(),
+                "watch_conditions": s.ledger.watch_conditions,
+            }
         return {
             "session_id": s.id, "stage": s.stage.value, "slots": s.slots,
             "intent": intent.model_dump() if intent else None,
+            "ledger": ledger,
             "blocks": [b.model_dump() for b in blocks],
         }

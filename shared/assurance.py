@@ -1,8 +1,58 @@
-"""Local decision contracts; no network, inferred quality or production governance changes."""
+"""Local decision contracts; no network, inferred quality or production governance changes.
+
+Merchant Decision Sufficiency (arXiv:2610.17378) 를 shadow 로 반영한다.
+필수조건(총비용·반품·서비스일·variant)이 판매처 근거로 확정 불가하면 점수를 낮추는 대신
+NOT_RANKABLE 로 분리한다. 근거 coverage 와 missingness 를 함께 돌려준다.
+"""
 from datetime import datetime, timezone
 from shared.models import Offer
 
-POLICY_VERSION = "kop-local-2026-10-16-v1"
+POLICY_VERSION = "kop-local-2026-10-16-v2"
+
+# 구매 mandate 의 필수 조건 — 판매처 근거로 확정 가능해야 한다
+MANDATE_TERMS = ("total_cost", "return_terms", "service_date", "variant_id")
+
+
+def _term_state(offer: Offer, term: str) -> str:
+    """DETERMINATE / INDETERMINATE / UNKNOWN."""
+    if term == "total_cost":
+        if offer.total_cost_determinate is True and offer.total_price is not None:
+            return "DETERMINATE"
+        if offer.total_cost_determinate is False:
+            return "INDETERMINATE"
+        return "UNKNOWN"
+    if term == "return_terms":
+        if offer.return_terms:
+            return "DETERMINATE"
+        if offer.return_policy:
+            return "INDETERMINATE"
+        return "UNKNOWN"
+    if term == "service_date":
+        if offer.service_date:
+            return "DETERMINATE"
+        if offer.delivery_terms:
+            return "INDETERMINATE"
+        return "UNKNOWN"
+    if term == "variant_id":
+        return "DETERMINATE" if offer.variant_id else "UNKNOWN"
+    return "UNKNOWN"
+
+
+def decision_sufficiency(offer: Offer) -> dict:
+    """판매처 근거로 구매조건이 확정 가능한지 평가한다."""
+    states = {t: _term_state(offer, t) for t in MANDATE_TERMS}
+    determinate = [t for t, s in states.items() if s == "DETERMINATE"]
+    missing = [t for t, s in states.items() if s != "DETERMINATE"]
+    coverage = len(determinate) / len(MANDATE_TERMS)
+    if any(s == "INDETERMINATE" for s in states.values()):
+        rankability = "INDETERMINATE"
+    elif missing:
+        rankability = "UNKNOWN"
+    else:
+        rankability = "DETERMINATE"
+    return {"states": states, "coverage": round(coverage, 3), "missing": missing,
+            "rankability": rankability}
+
 
 def assess(offer: Offer, *, now=None, max_age_hours=24):
     now = now or datetime.now(timezone.utc)
@@ -22,9 +72,14 @@ def assess(offer: Offer, *, now=None, max_age_hours=24):
         gaps.append("fresh_price")
     if offer.is_sample:
         gaps.append("real_product")
+    suff = decision_sufficiency(offer)
+    # 근거 coverage 부족은 점수 하향이 아니라 랭킹 분리 사유
+    if suff["rankability"] != "DETERMINATE":
+        gaps.extend(f"term:{t}" for t in suff["missing"])
     return {"policy_version": POLICY_VERSION, "status": "NOT_RANKABLE" if gaps else "RANKABLE",
             "missing": gaps, "next_evidence": list(gaps),
-            "observed_at": observed.isoformat(), "scope": "local_candidate_comparison"}
+            "observed_at": observed.isoformat(), "scope": "local_candidate_comparison",
+            "sufficiency": suff}
 
 def price_gap(retail: Offer, wholesale: Offer):
     """No kg conversion or quality equivalence inferred from titles."""
