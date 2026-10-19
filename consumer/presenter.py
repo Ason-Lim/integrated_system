@@ -168,6 +168,8 @@ def decode_answers(ans: dict) -> dict:
     if r := ans.get("recipient"):
         out["recipient"] = r
         out["purpose"] = "gift"
+    if p := ans.get("priority"):
+        out["priority"] = p
     return out
 
 
@@ -240,7 +242,8 @@ def _shipping_options_block(items: list[ScoredOffer]) -> Block:
 
 def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls: list[str],
                           country_code: str | None = None,
-                          ledger: LedgerEntry | None = None) -> list[Block]:
+                          ledger: LedgerEntry | None = None,
+                          persona_unknown: list[str] | None = None) -> list[Block]:
     s = intent.slots
     product = s.get("product", "")
     if not items:
@@ -324,14 +327,15 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     if country_code and country_code.upper() != "KR":
         blocks.append(_shipping_options_block(items))
 
-    form = _form(s, items)
+    form = _form(s, items, persona_unknown=persona_unknown)
     if form["questions"]:
         blocks.append(Block(type="clarify_form", data=form))
     blocks.append(Block(type="chips", data={"items": ["더 저렴한 것", "후기 많은 순", "프리미엄으로"], "mode": "chip"}))
     return blocks
 
 
-def _form(s: dict, items: list[ScoredOffer], force_budget: bool = False) -> dict:
+def _form(s: dict, items: list[ScoredOffer], force_budget: bool = False,
+          persona_unknown: list[str] | None = None) -> dict:
     qs = []
     if force_budget or not (s.get("budget_max") or s.get("budget_min")):
         qs.append({"id": "budget", "label": "예산은 어느 정도인가요?", "options": budget_buckets(items)})
@@ -342,4 +346,9 @@ def _form(s: dict, items: list[ScoredOffer], force_budget: bool = False) -> dict
     elif not s.get("mall") and len(qs) < 2:
         qs.append({"id": "mall", "label": "주로 어디서 사세요?", "options": [
             {"label": "쿠팡", "value": "coupang"}, {"label": "네이버", "value": "naver"}, {"label": "상관없음", "value": "any"}]})
+    # SimInter: 행동 근거가 없는 선호는 지어내지 않고 직접 묻는다.
+    if persona_unknown and "priority" in persona_unknown and len(qs) < 2:
+        qs.append({"id": "priority", "label": "고를 때 무엇을 가장 중요하게 보세요?", "options": [
+            {"label": "가격", "value": "price"}, {"label": "품질", "value": "quality"},
+            {"label": "후기·신뢰", "value": "trust"}]})
     return {"questions": qs[:2], "submit": "이 조건으로 다시 추천받기"}

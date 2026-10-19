@@ -77,6 +77,22 @@ def test_safe_qe_drops_unsupported_expansion():
     assert r2["kept"] == ["홍로"] and not r2["dropped"]
 
 
+def test_persona_unknown_without_evidence():
+    from shared.persona import infer
+    p = infer({"clicks": [], "searches": []})
+    assert p.unknown == ["price", "quality", "trust"]
+    assert p.slots() == {}
+    assert p.audit()["unsupported_rate"] == 1.0
+
+
+def test_persona_uses_behavior_evidence():
+    from shared.persona import infer
+    p = infer({"clicks": [{"rank": 4}, {"rank": 5}], "searches": []})
+    assert p.claims["price"].value == "price"
+    assert p.slots() == {"price": "price"}
+    assert "quality" in p.unknown
+
+
 def test_ledger_detects_price_change():
     from datetime import timedelta
     from shared.decision_ledger import open_entry, refresh_needed

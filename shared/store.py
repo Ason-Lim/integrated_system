@@ -138,6 +138,24 @@ def latest_ledger(session_id: str) -> dict | None:
     return dict(row._mapping) if row else None
 
 
+def behavior_evidence(session_id: str, limit: int = 50) -> dict:
+    """세션의 실제 행동 근거를 모은다 (SimInter, arXiv:2610.18308).
+
+    - clicks: 클릭한 상품의 순위·점수 (낮은 순위 클릭 = 가격/품질 선호 신호)
+    - searches: 검색 슬롯 (priority, budget, mall 등)
+    - observations: 클릭한 상품의 관측 정보 (평점·후기 수·가격)
+    근거가 없으면 빈 리스트를 돌려준다 — 추론은 호출 측(persona)에서만 한다.
+    """
+    with engine().connect() as c:
+        clicks = [dict(r._mapping) for r in c.execute(
+            select(click_log).where(click_log.c.session_id == session_id)
+            .order_by(click_log.c.id.desc()).limit(limit))]
+        searches = [dict(r._mapping) for r in c.execute(
+            select(search_log).where(search_log.c.session_id == session_id)
+            .order_by(search_log.c.id.desc()).limit(limit))]
+    return {"clicks": clicks, "searches": searches}
+
+
 def recent_observations(keyword: str, limit: int = 20, include_sample: bool = False) -> list[dict]:
     """B2B 가 읽기 전용으로 사용: 키워드가 들어간 최근 관측 가격."""
     q = select(offer_observation).where(offer_observation.c.title.contains(keyword))

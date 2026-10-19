@@ -18,6 +18,7 @@ from shared.models import Block, Intent
 from shared.nlu.service import NLUService
 from shared import store
 from shared.decision_ledger import LedgerEntry, invalidated, open_entry
+from shared import persona
 from consumer import presenter
 
 
@@ -45,6 +46,8 @@ class Session:
     country_code: str | None = None
     # Decision Freshness Ledger (shadow)
     ledger: LedgerEntry | None = None
+    # 근거 기반 페르소나 (SimInter, shadow)
+    persona: persona.Persona | None = None
 
 
 # 빠른 응답 칩 → 슬롯 변경 (서버가 해석, LLM 불필요)
@@ -144,6 +147,15 @@ class DialogueManager:
             s.stage = Stage.CLARIFY
             return self._reply(s, presenter.ask_product_blocks(intent))
 
+        # SimInter: 실제 행동 근거로만 선호를 추론한다. 근거 없는 선호는 UNKNOWN 으로 남긴다.
+        if self.persist:
+            try:
+                s.persona = persona.infer(store.behavior_evidence(s.id))
+                for k, v in s.persona.slots().items():
+                    intent.slots.setdefault(k, v)
+            except Exception:
+                s.persona = None
+
         query, items = self.rec.recommend(intent, session_id=s.id)
         # Decision Freshness Ledger: 추천 시점·근거 시점·실행 예정 시점·재검토 마감 기록
         s.ledger = open_entry(intent, [x.offer for x in items])
@@ -158,7 +170,8 @@ class DialogueManager:
         s.last_items = items
         s.last_query = query
         blocks = presenter.recommendation_blocks(intent, items, active_malls=self.rec.markets.active,
-                                                 country_code=s.country_code, ledger=s.ledger)
+                                                 country_code=s.country_code, ledger=s.ledger,
+                                                 persona_unknown=s.persona.unknown if s.persona else None)
         return self._reply(s, blocks, intent=intent)
 
     # ── EXPLORE: follow_up 칩에 대한 규칙 기반 즉시 응답 ─────────────
@@ -286,5 +299,6 @@ class DialogueManager:
             "session_id": s.id, "stage": s.stage.value, "slots": s.slots,
             "intent": intent.model_dump() if intent else None,
             "ledger": ledger,
+            "persona": s.persona.audit() if s.persona else None,
             "blocks": [b.model_dump() for b in blocks],
         }
