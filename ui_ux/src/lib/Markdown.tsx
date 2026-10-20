@@ -12,7 +12,15 @@ function inline(s: string): ReactNode[] {
   );
 }
 
+/** "1. 2. 3. ..." 처럼 숫자만 무한히 이어붙은 비정상 문자열을 걸러낸다. */
+function isNumericNoise(s: string): boolean {
+  const tokens = s.trim().split(/\s+/);
+  if (tokens.length < 5) return false;
+  return tokens.every((t) => /^\d+\.?$/.test(t));
+}
+
 export function Markdown({ text, className }: { text: string; className?: string }) {
+  if (!text || isNumericNoise(text)) return null;
   const lines = text.split("\n");
   const out: ReactNode[] = [];
   let list: string[] = [];

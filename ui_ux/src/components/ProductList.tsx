@@ -18,8 +18,10 @@ function Row({ c, sponsored }: { c: Candidate; sponsored?: boolean }) {
   const { openDetail } = useChatActions();
   const { tags, name } = splitTitle(c.title);
   return (
-    <article className="flex gap-4 p-4">
-      <Thumb c={c} />
+    <article className="flex items-start gap-4 p-4">
+      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-stone-100">
+        <Thumb c={c} />
+      </div>
       <div className="min-w-0 flex-1 space-y-1.5">
         {(sponsored || tags.length > 0) && (
           <div className="flex flex-wrap gap-1">
@@ -34,9 +36,6 @@ function Row({ c, sponsored }: { c: Candidate; sponsored?: boolean }) {
         <TotalPrice c={c} size="lg" />
         {!sponsored && c.reasons[0] && <p className="text-sm text-ink2">{c.reasons[0]}</p>}
         <div className="flex flex-wrap gap-1.5">
-          <span className="rounded-md bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 평점 미확인</span>
-          <span className="rounded-md bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 후기 수 미확인</span>
-          <span className="rounded-md bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 도착 예정일 미확인</span>
           <UnverifiedTags items={c.unverified} compact />
         </div>
         <SourceMeta c={c} />

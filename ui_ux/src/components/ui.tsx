@@ -10,7 +10,7 @@ export function Thumb({ c, size = "md" }: { c: Pick<Candidate, "image" | "title"
   return (
     <div className={cx("grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-chip font-extrabold text-ink3", dim)}>
       {c.image && !failed
-        ? <img src={c.image} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" />
+        ? <img src={c.image} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full rounded-xl object-cover" />
         : initial}
     </div>
   );
