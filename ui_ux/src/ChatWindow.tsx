@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowRight, Plus, Sparkles, ShoppingBag, Utensils, SlidersHorizontal, Square, Gift, Cookie, Leaf } from 'lucide-react';
 import { BlockRenderer } from './components/BlockRenderer';
 import { ProductDetail } from './components/ProductDetail';
+import { FlowStepper } from './components/FlowStepper';
+import type { FlowStep } from './state/useConversation';
 import type { Message, Product } from './types';
 import { isDemo, sendMessage } from './lib/api';
 
@@ -43,6 +45,16 @@ export default function ChatWindow() {
     const locked = useRef(false);
     const bottom = useRef<HTMLDivElement>(null);
 
+    // 대화 진행 상태로 현재 단계 추정: 입력 → 조건 확인 → 후보 비교 → 상품 판단 → 구매 연결
+    const step: FlowStep = (() => {
+        if (!messages.length) return 1;
+        if (busy) return 2;
+        const assistantTurns = messages.filter(m => m.role === 'assistant').length;
+        if (assistantTurns <= 1) return 3;
+        if (assistantTurns === 2) return 4;
+        return 5;
+    })();
+
     useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages, busy, error]);
     useEffect(() => () => controller.current?.abort(), []);
 
@@ -82,7 +94,10 @@ export default function ChatWindow() {
                         AI 식품 추천
                     </a>
                     <div className="flex items-center gap-3">
-                        <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] text-stone-500">API 연결 준비 중</span>
+                        <span className="hidden rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] text-stone-500 md:inline">API 연결 준비 중</span>
+                        <div className="hidden sm:flex">
+                            <FlowStepper step={step} />
+                        </div>
                         <button className="flex items-center gap-1 rounded-lg p-2 text-xs hover:bg-stone-100" disabled={busy} onClick={() => { setMessages([]); setSessionId(null); setError(''); setInput(''); }}>
                             <Plus size={16} /><span className="hidden sm:inline">새 대화</span>
                         </button>
