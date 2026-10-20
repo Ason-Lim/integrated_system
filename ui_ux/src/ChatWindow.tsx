@@ -1,0 +1,175 @@
+import { useEffect, useRef, useState } from 'react';
+import { ArrowUp, ArrowRight, Plus, Sparkles, ShoppingBag, Utensils, SlidersHorizontal, Square, Gift, Cookie, Leaf } from 'lucide-react';
+import { BlockRenderer } from './components/BlockRenderer';
+import { ProductDetail } from './components/ProductDetail';
+import type { Message, Product } from './types';
+import { isDemo, sendMessage } from './lib/api';
+
+// 1. 아이콘 매핑 (JSON의 icon 필드와 lucide-react 아이콘 연결)
+const iconMap: Record<string, any> = {
+    Gift: Gift, Cookie: Cookie, Utensils: Utensils, Leaf: Leaf, ShoppingBag: ShoppingBag, Sparkles: Sparkles
+};
+
+// 2. 폴더 내 모든 trend_examples_*.json 파일 로드
+const trendModules = import.meta.glob('./data/trend_examples_*.json', { eager: true });
+
+// 3. 파일명 기준 내림차순 정렬하여 가장 최신 파일 찾기
+const sortedPaths = Object.keys(trendModules).sort().reverse();
+const latestPath = sortedPaths[0];
+const latestData: any = latestPath ? (trendModules[latestPath] as any).default : [];
+
+// 4. 최신 JSON 데이터를 기반으로 examples 배열 동적 생성 (폴백 포함)
+const examples = latestData.length > 0
+    ? latestData.map((item: any) => ({
+        icon: iconMap[item.icon] || ShoppingBag,
+        label: item.category || '추천',
+        text: item.question,
+        note: item.keyword || '맞춤 추천'
+    }))
+    : [
+        { icon: ShoppingBag, label: '취향에 맞는 상품 찾기', text: '두바이 쫀득쿠키 추천해줘', note: '가격부터 배송까지 한 번에' },
+        { icon: SlidersHorizontal, label: '조건부터 함께 정하기', text: '모니터를 사고 싶어요', note: '나에게 중요한 기준을 먼저' },
+        { icon: Utensils, label: '레시피로 장보기', text: '파스타 레시피로 장보기', note: '있는 재료는 빼고, 필요한 만큼' }
+    ];
+
+export default function ChatWindow() {
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState('');
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [detail, setDetail] = useState<Product | null>(null);
+    const controller = useRef<AbortController | null>(null);
+    const locked = useRef(false);
+    const bottom = useRef<HTMLDivElement>(null);
+
+    useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages, busy, error]);
+    useEffect(() => () => controller.current?.abort(), []);
+
+    async function submit(value: string) {
+        const text = value.trim();
+        if (!text || locked.current) return;
+        locked.current = true;
+        setBusy(true);
+        setError('');
+        setInput('');
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', text }]);
+        const current = new AbortController();
+        controller.current = current;
+        const timeout = window.setTimeout(() => current.abort('timeout'), 30000);
+        try {
+            const response = await sendMessage(text, sessionId, current.signal);
+            if (current.signal.aborted) return;
+            setSessionId(response.session_id);
+            setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', blocks: response.blocks }]);
+        } catch (e) {
+            if (current.signal.reason !== 'cancelled')
+                setError(current.signal.aborted ? '응답 시간이 초과됐어요.' : e instanceof Error ? e.message : '응답 오류');
+        } finally {
+            clearTimeout(timeout);
+            locked.current = false;
+            setBusy(false);
+            controller.current = null;
+        }
+    }
+
+    return (
+        <div className="min-h-dvh bg-canvas text-ink">
+            <header className="sticky top-0 z-10 border-b border-stone-200/70 bg-canvas/95 backdrop-blur">
+                <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-5 sm:px-8">
+                    <a href="./" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-ink text-white"><Sparkles size={17} /></span>
+                        AI 식품 추천
+                    </a>
+                    <div className="flex items-center gap-3">
+                        <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] text-stone-500">API 연결 준비 중</span>
+                        <button className="flex items-center gap-1 rounded-lg p-2 text-xs hover:bg-stone-100" disabled={busy} onClick={() => { setMessages([]); setSessionId(null); setError(''); setInput(''); }}>
+                            <Plus size={16} /><span className="hidden sm:inline">새 대화</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <main className="mx-auto w-full max-w-[900px] px-4 pb-8 pt-8 sm:px-8">
+                {!messages.length ? (
+                    <section className="pb-12 pt-8 sm:pt-16">
+                        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-xs text-accent">
+                            <Sparkles size={13} />더 쉬운 선택의 시작
+                        </div>
+                        <h1 className="text-[34px] font-medium leading-[1.35] tracking-tight sm:text-5xl">
+                            식품 구매,<br /><span className="text-accent">무엇이든 물어보세요!</span>
+                        </h1>
+                        <p className="mt-5 text-sm leading-7 text-stone-500 sm:text-base">
+                            원하는 상품이나 만들고 싶은 요리를 말해 주세요.<br />중요한 조건을 확인하고, 비교하기 쉽게 정리해 드려요.
+                        </p>
+
+                        {/* 예시 질문 버튼 렌더링 영역 (모바일 1열, PC 2x2 그리드) */}
+                        {/* 예시 질문 버튼 렌더링 영역 (모바일 1열, PC 2x2 그리드) */}
+                        <div className="mt-9 grid gap-3 grid-cols-1 sm:grid-cols-2">
+                            {examples.map(({ icon: Icon, ...item }: any) => {
+                                return (
+                                    <button key={item.text} onClick={() => void submit(item.text)} className="group flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-sm">
+                                        <div>
+                                            <div className="mb-4 flex items-center gap-2">
+                                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-accent">
+                                                    <Icon size={16} />
+                                                </span>
+                                                <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-semibold text-stone-600">
+                                                    {item.label}
+                                                </span>
+                                            </div>
+                                            <p className="text-[15px] font-medium leading-relaxed text-ink break-keep">
+                                                "{item.text}"
+                                            </p>
+                                        </div>
+                                        <div className="mt-5 flex w-full items-center justify-between text-xs text-stone-400">
+                                            <span>{item.note}</span>
+                                            <ArrowRight size={16} className="transition group-hover:text-accent group-hover:translate-x-1" />
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <p className="mt-7 text-center text-xs text-stone-400">조건 확인 → 후보 비교 → 근거 확인 → 판매처 연결</p>
+                    </section>
+                ) : (
+                    <div className="space-y-8">
+                        {messages.map(message => (
+                            <section key={message.id} className={message.role === 'user' ? 'flex justify-end' : 'min-w-0'} aria-label={message.role === 'user' ? '내 질문' : 'AI 응답'}>
+                                {message.role === 'user' ? (
+                                    <p className="max-w-[88%] whitespace-pre-wrap break-words rounded-3xl rounded-tr-md bg-[#eaece5] px-5 py-3 text-sm leading-7">{message.text}</p>
+                                ) : (
+                                    <>
+                                        <div className="mb-4 flex items-center gap-2 text-xs font-semibold"><Sparkles size={16} className="text-accent" />AI 식품 추천</div>
+                                        <BlockRenderer blocks={message.blocks ?? []} onAction={v => void submit(v)} onDetail={setDetail} disabled={busy} />
+                                    </>
+                                )}
+                            </section>
+                        ))}
+                        <div role="status" aria-live="polite">{busy && <p className="animate-pulse text-sm text-stone-500">조건을 살펴보고 있어요…</p>}</div>
+                    </div>
+                )}
+                {error && <div role="alert" className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+                <div ref={bottom} />
+            </main>
+
+            <footer className="sticky bottom-0 mx-auto w-full max-w-[900px] bg-gradient-to-t from-canvas via-canvas to-canvas/90 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:px-8">
+                <form onSubmit={e => { e.preventDefault(); void submit(input); }} className="rounded-3xl border border-stone-200 bg-white p-3 shadow-[0_4px_24px_#00000006]">
+                    <label htmlFor="prompt" className="sr-only">쇼핑 질문</label>
+                    <textarea id="prompt" value={input} onChange={e => setInput(e.target.value)} rows={2} maxLength={4000} placeholder="어떤 상품을 찾으세요? 예산과 원하는 조건을 알려주세요." className="max-h-40 min-h-14 w-full resize-y bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-stone-400" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(input); } }} />
+                    <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] text-stone-400">추천 정보는 판매처에서 최종 확인해 주세요</span>
+                        {busy ? (
+                            <button type="button" aria-label="응답 중단" className="send" onClick={() => controller.current?.abort('cancelled')}><Square size={15} /></button>
+                        ) : (
+                            <button type="submit" className="send" aria-label="질문 보내기" disabled={!input.trim()}><ArrowUp size={18} /></button>
+                        )}
+                    </div>
+                </form>
+                <p className="mt-3 text-center text-[10px] text-stone-400">가격·배송·리뷰는 확인 시점에 따라 달라질 수 있어요. 유료 소개는 별도 표시합니다.</p>
+            </footer>
+
+            {detail && <ProductDetail key={detail.title} product={detail} onClose={() => setDetail(null)} />}
+        </div>
+    );
+}
