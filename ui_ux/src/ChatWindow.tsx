@@ -126,18 +126,18 @@ export default function ChatWindow() {
                                     <button key={item.text} onClick={() => void submit(item.text)} className="group flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-sm">
                                         <div>
                                             <div className="mb-4 flex items-center gap-2">
-                                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-accent">
-                                                    <Icon size={16} />
+                                                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-accent">
+                                                    <Icon size={20} />
                                                 </span>
-                                                <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-semibold text-stone-600">
+                                                <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">
                                                     {item.label}
                                                 </span>
                                             </div>
-                                            <p className="text-[15px] font-medium leading-relaxed text-ink break-keep">
+                                            <p className="text-lg font-medium leading-relaxed text-ink break-keep">
                                                 "{item.text}"
                                             </p>
                                         </div>
-                                        <div className="mt-5 flex w-full items-center justify-between text-xs text-stone-400">
+                                        <div className="mt-5 flex w-full items-center justify-between text-sm text-stone-400">
                                             <span>{item.note}</span>
                                             <ArrowRight size={16} className="transition group-hover:text-accent group-hover:translate-x-1" />
                                         </div>
