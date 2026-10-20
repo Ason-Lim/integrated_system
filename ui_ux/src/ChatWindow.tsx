@@ -108,11 +108,11 @@ export default function ChatWindow() {
             <main className="mx-auto w-full max-w-[900px] px-4 pb-8 pt-8 sm:px-8">
                 {!messages.length ? (
                     <section className="pb-12 pt-8 sm:pt-16">
-                        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-xs text-accent">
-                            <Sparkles size={13} />더 쉬운 선택의 시작
+                        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2.5 text-sm text-accent">
+                            <Sparkles size={18} />더 쉬운 선택의 시작
                         </div>
-                        <h1 className="text-[34px] font-medium leading-[1.35] tracking-tight sm:text-5xl">
-                            식품 구매,<br /><span className="text-accent">무엇이든 물어보세요!</span>
+                        <h1 className="text-3xl font-medium leading-[1.35] tracking-tight sm:text-4xl">
+                            식품 구매, <span className="text-accent">무엇이든 물어보세요!</span>
                         </h1>
                         <p className="mt-5 text-sm leading-7 text-stone-500 sm:text-base">
                             원하는 상품이나 만들고 싶은 요리를 말해 주세요.<br />중요한 조건을 확인하고, 비교하기 쉽게 정리해 드려요.
