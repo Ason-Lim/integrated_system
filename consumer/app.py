@@ -9,7 +9,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -20,8 +22,22 @@ from shared import store
 from shared.decision_ledger import refresh_needed
 
 WEB = Path(__file__).parent / "web"
+# 프론트엔드(Vite) 빌드 결과물. `npm run build` 후 ui_ux/dist 에 생성된다.
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "ui_ux" / "dist"
 app = FastAPI(title="commerce_ai — 대화형 추천", version="1.0")
 dm = DialogueManager()
+
+# 개발 중 프론트엔드(Vite dev server)에서 API 를 호출할 수 있도록 허용한다.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class GeoIPMiddleware(BaseHTTPMiddleware):
@@ -101,3 +117,9 @@ def decision_ledger(sid: str):
 @app.post("/api/recipe/plan")
 def recipe_plan(body: "RecipePlan"):
     return body.evaluate()
+
+
+# 프론트엔드 빌드 결과물이 있으면 정적 파일로 서빙한다.
+# (빌드 전에는 디렉터리가 없으므로 마운트하지 않는다.)
+if FRONTEND_DIST.is_dir():
+    app.mount("/app", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
