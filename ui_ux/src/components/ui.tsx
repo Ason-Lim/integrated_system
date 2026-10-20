@@ -1,13 +1,17 @@
 /** 작은 공용 조각: 썸네일 · 가격 · 근거/미확인 태그 · 출처 */
+import { useState } from "react";
 import type { Candidate } from "../types/blocks";
 import { cx, won } from "../lib/format";
 
 export function Thumb({ c, size = "md" }: { c: Pick<Candidate, "image" | "title">; size?: "sm" | "md" | "lg" }) {
+  const [failed, setFailed] = useState(false);
   const dim = size === "sm" ? "h-14 w-14 text-lg" : size === "lg" ? "h-28 w-28 text-3xl" : "h-20 w-20 text-2xl";
   const initial = (c.title.match(/[가-힣A-Za-z]/)?.[0] ?? "·");
   return (
     <div className={cx("grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-chip font-extrabold text-ink3", dim)}>
-      {c.image ? <img src={c.image} alt="" loading="lazy" className="h-full w-full object-cover" /> : initial}
+      {c.image && !failed
+        ? <img src={c.image} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" />
+        : initial}
     </div>
   );
 }

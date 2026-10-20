@@ -3,13 +3,26 @@ import { useChatActions } from "./ChatActions";
 import { EvidenceTags, SourceMeta, Thumb, TotalPrice, UnverifiedTags } from "./ui";
 import { cx, won } from "../lib/format";
 
+/** 상품명 앞의 [빨간특기] 같은 대괄호 태그를 제거한다. */
+function cleanTitle(title: string): string {
+  return title.replace(/^\s*(\[[^\]]*\]\s*)+/, "").trim() || title;
+}
+
 /**
  * ③ 후보 비교 — 3개 내외 후보를 같은 기준(총가격·중량·배송·선택 이유·확인되지 않은 조건)으로 비교.
  * 세로 리스트 카드: 카드마다 안내 배지 → 썸네일·상품명·가격 → 미확인 태그 → 상세 보기.
  */
 export function CandidateCompare({ block }: { block: CandidateCompareBlock }) {
-  const { candidates, conditions, title } = block.data;
+  const { conditions, title } = block.data;
   const { openDetail } = useChatActions();
+  // 동일 상품(제목+가격) 중복 제거
+  const seen = new Set<string>();
+  const candidates = block.data.candidates.filter((c) => {
+    const key = `${c.title.trim()}::${c.total ?? c.price}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (!candidates.length) return null;
 
   const totals = candidates.map((c) => c.total).filter((v): v is number => v != null);
@@ -29,18 +42,18 @@ export function CandidateCompare({ block }: { block: CandidateCompareBlock }) {
       ) : null}
 
       {/* ── 세로 리스트 카드 ── */}
+      <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-chip px-2.5 py-1 text-[11px] font-medium text-ink3">
+        참고용 후보 · 구매조건 근거가 부족해 순위 비교에서 분리했어요
+      </div>
       <div className="space-y-4">
         {candidates.map((c) => (
           <article key={c.key} className="card rise p-5">
-            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-chip px-2.5 py-1 text-[11px] font-medium text-ink3">
-              참고용 후보 · 구매조건 근거가 부족해 순위 비교에서 분리했어요
-            </div>
             <div className="flex gap-4">
               <Thumb c={c} />
               <div className="min-w-0 flex-1">
                 <span className="text-xs font-bold text-accent">후보 {c.rank}</span>
                 <button type="button" onClick={() => openDetail(c)}
-                  className="block text-left text-base font-bold leading-snug hover:underline">{c.title}</button>
+                  className="line-clamp-2 block text-left text-base font-bold leading-snug hover:underline">{cleanTitle(c.title)}</button>
                 <div className="mt-1.5"><TotalPrice c={c} best={isBestTotal(c)} /></div>
                 <div className="mt-1 text-xs text-ink2">
                   {c.weightLabel ?? <span className="text-warn">중량 표기 없음</span>}
@@ -50,9 +63,9 @@ export function CandidateCompare({ block }: { block: CandidateCompareBlock }) {
             </div>
 
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <span className="tag bg-warnSoft text-warn">? 평점 미확인</span>
-              <span className="tag bg-warnSoft text-warn">? 후기 수 미확인</span>
-              <span className="tag bg-warnSoft text-warn">? 도착 예정일 미확인</span>
+              <span className="rounded-full bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 평점 미확인</span>
+              <span className="rounded-full bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 후기 수 미확인</span>
+              <span className="rounded-full bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 도착 예정일 미확인</span>
               <UnverifiedTags items={c.unverified} compact />
             </div>
 
