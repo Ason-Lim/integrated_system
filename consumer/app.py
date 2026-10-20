@@ -65,11 +65,6 @@ class ChatIn(BaseModel):
     chip: str | None = None
 
 
-@app.get("/")
-def index():
-    return FileResponse(WEB / "index.html")
-
-
 @app.post("/api/chat")
 def chat(body: ChatIn, request: Request):
     code = getattr(request.state, "country_code", None)
@@ -119,7 +114,11 @@ def recipe_plan(body: "RecipePlan"):
     return body.evaluate()
 
 
-# 프론트엔드 빌드 결과물이 있으면 정적 파일로 서빙한다.
-# (빌드 전에는 디렉터리가 없으므로 마운트하지 않는다.)
+# 프론트엔드 빌드 결과물이 있으면 루트(/)에서 서빙한다.
+# (빌드 전에는 디렉터리가 없으므로 마운트하지 않고, 기존 web/index.html 로 폴백한다.)
 if FRONTEND_DIST.is_dir():
-    app.mount("/app", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+else:
+    @app.get("/")
+    def index():
+        return FileResponse(WEB / "index.html")
