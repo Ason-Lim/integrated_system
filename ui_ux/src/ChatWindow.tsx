@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, ArrowRight, Plus, Sparkles, ShoppingBag, Utensils, SlidersHorizontal, Square, Gift, Cookie, Leaf } from 'lucide-react';
 import { BlockRenderer } from './components/BlockRenderer';
 import { ProductDetail } from './components/ProductDetail';
 import { FlowStepper } from './components/FlowStepper';
-import type { FlowStep } from './state/useConversation';
-import type { Message, Product } from './types';
-import { isDemo, sendMessage } from './lib/api';
+import { ChatActions, type ChatActionsValue } from './components/ChatActions';
+import type { FlowStep, SendPayload } from './state/useConversation';
+import type { Message } from './types';
+import type { Candidate } from './types/blocks';
+import { sendChat } from './api/client';
 
 // 1. 아이콘 매핑 (JSON의 icon 필드와 lucide-react 아이콘 연결)
 const iconMap: Record<string, any> = {
@@ -40,13 +42,15 @@ export default function ChatWindow() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const [detail, setDetail] = useState<Product | null>(null);
+    const [detail, setDetail] = useState<Candidate | null>(null);
+    const [purchasing, setPurchasing] = useState(false);
     const controller = useRef<AbortController | null>(null);
     const locked = useRef(false);
     const bottom = useRef<HTMLDivElement>(null);
 
     // 대화 진행 상태로 현재 단계 추정: 입력 → 조건 확인 → 후보 비교 → 상품 판단 → 구매 연결
     const step: FlowStep = (() => {
+        if (detail) return purchasing ? 5 : 4;
         if (!messages.length) return 1;
         if (busy) return 2;
         const assistantTurns = messages.filter(m => m.role === 'assistant').length;
@@ -58,19 +62,20 @@ export default function ChatWindow() {
     useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages, busy, error]);
     useEffect(() => () => controller.current?.abort(), []);
 
-    async function submit(value: string) {
-        const text = value.trim();
-        if (!text || locked.current) return;
+    // 자연어 메시지 · 칩 · 조건 선택(answers) 모두 이 함수로 서버에 보낸다
+    async function send(payload: SendPayload, userText?: string) {
+        if (locked.current) return;
+        if (!payload.message?.trim() && !payload.chip && !payload.answers) return;
         locked.current = true;
         setBusy(true);
         setError('');
-        setInput('');
-        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', text }]);
+        const shown = userText ?? payload.message?.trim();
+        if (shown) setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', text: shown }]);
         const current = new AbortController();
         controller.current = current;
         const timeout = window.setTimeout(() => current.abort('timeout'), 30000);
         try {
-            const response = await sendMessage(text, sessionId, current.signal);
+            const response = await sendChat({ session_id: sessionId, ...payload }, current.signal);
             if (current.signal.aborted) return;
             setSessionId(response.session_id);
             setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', blocks: response.blocks }]);
@@ -85,7 +90,25 @@ export default function ChatWindow() {
         }
     }
 
+    function submit(value: string) {
+        const text = value.trim();
+        if (!text || locked.current) return;
+        setInput('');
+        void send({ message: text }, text);
+    }
+
+    const closeDetail = useCallback(() => { setDetail(null); setPurchasing(false); }, []);
+
+    // 블록 컴포넌트(칩·조건 선택·상품 카드)가 쓰는 동작
+    const actions: ChatActionsValue = useMemo(() => ({
+        send: (payload, userText) => void send(payload, userText),
+        openDetail: c => { setDetail(c); setPurchasing(false); },
+        busy,
+        sessionId,
+    }), [busy, sessionId]);
+
     return (
+        <ChatActions.Provider value={actions}>
         <div className="min-h-dvh bg-canvas text-ink">
             <header className="sticky top-0 z-10 border-b border-stone-200/70 bg-canvas/95 backdrop-blur">
                 <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-5 sm:px-8">
@@ -98,7 +121,7 @@ export default function ChatWindow() {
                         <div className="hidden sm:flex">
                             <FlowStepper step={step} />
                         </div>
-                        <button className="flex items-center gap-1 rounded-lg p-2 text-xs hover:bg-stone-100" disabled={busy} onClick={() => { setMessages([]); setSessionId(null); setError(''); setInput(''); }}>
+                        <button className="flex items-center gap-1 rounded-lg p-2 text-xs hover:bg-stone-100" disabled={busy} onClick={() => { setMessages([]); setSessionId(null); setError(''); setInput(''); closeDetail(); }}>
                             <Plus size={16} /><span className="hidden sm:inline">새 대화</span>
                         </button>
                     </div>
@@ -123,7 +146,7 @@ export default function ChatWindow() {
                         <div className="mt-9 grid gap-3 grid-cols-1 sm:grid-cols-2">
                             {examples.map(({ icon: Icon, ...item }: any) => {
                                 return (
-                                    <button key={item.text} onClick={() => void submit(item.text)} className="group flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-sm">
+                                    <button key={item.text} onClick={() => submit(item.text)} className="group flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-sm">
                                         <div>
                                             <div className="mb-4 flex items-center gap-2">
                                                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-accent">
@@ -156,7 +179,7 @@ export default function ChatWindow() {
                                 ) : (
                                     <>
                                         <div className="mb-4 flex items-center gap-2 text-xs font-semibold"><Sparkles size={16} className="text-accent" />AI 식품 추천</div>
-                                        <BlockRenderer blocks={message.blocks ?? []} onAction={v => void submit(v)} onDetail={setDetail} disabled={busy} />
+                                        <BlockRenderer blocks={message.blocks ?? []} />
                                     </>
                                 )}
                             </section>
@@ -169,9 +192,9 @@ export default function ChatWindow() {
             </main>
 
             <footer className="sticky bottom-0 mx-auto w-full max-w-[900px] bg-gradient-to-t from-canvas via-canvas to-canvas/90 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:px-8">
-                <form onSubmit={e => { e.preventDefault(); void submit(input); }} className="rounded-3xl border border-stone-200 bg-white p-3 shadow-[0_4px_24px_#00000006]">
+                <form onSubmit={e => { e.preventDefault(); submit(input); }} className="rounded-3xl border border-stone-200 bg-white p-3 shadow-[0_4px_24px_#00000006]">
                     <label htmlFor="prompt" className="sr-only">쇼핑 질문</label>
-                    <textarea id="prompt" value={input} onChange={e => setInput(e.target.value)} rows={2} maxLength={4000} placeholder="어떤 상품을 찾으세요? 예산과 원하는 조건을 알려주세요." className="max-h-40 min-h-14 w-full resize-y bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-stone-400" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(input); } }} />
+                    <textarea id="prompt" value={input} onChange={e => setInput(e.target.value)} rows={2} maxLength={4000} placeholder="어떤 상품을 찾으세요? 예산과 원하는 조건을 알려주세요." className="max-h-40 min-h-14 w-full resize-y bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-stone-400" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(input); } }} />
                     <div className="flex items-center justify-between px-1">
                         <span className="text-[11px] text-stone-400">추천 정보는 판매처에서 최종 확인해 주세요</span>
                         {busy ? (
@@ -184,7 +207,8 @@ export default function ChatWindow() {
                 <p className="mt-3 text-center text-[10px] text-stone-400">가격·배송·리뷰는 확인 시점에 따라 달라질 수 있어요. 유료 소개는 별도 표시합니다.</p>
             </footer>
 
-            {detail && <ProductDetail key={detail.title} product={detail} onClose={() => setDetail(null)} />}
+            {detail && <ProductDetail key={detail.key} c={detail} sessionId={sessionId} purchasing={purchasing} onPurchasing={setPurchasing} onClose={closeDetail} />}
         </div>
+        </ChatActions.Provider>
     );
 }
