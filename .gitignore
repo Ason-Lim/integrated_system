@@ -10,3 +10,5 @@ var/knowledge/
 var/affiliate/
 var/blog_drafts/
 _backup_before_restore_*/
+data/foodpolis_raw/
+var/*.log
