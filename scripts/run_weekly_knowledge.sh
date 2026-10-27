@@ -1,0 +1,12 @@
+#!/bin/bash
+# 매주 월요일 10:20 launchd 실행: 공공 레시피 DB + 농사로 식재료 보관법 수집
+# (두 스크립트 모두 표준 라이브러리만 쓰므로 시스템 파이썬으로 실행)
+cd "$(dirname "$0")/.." || exit 1
+mkdir -p var/logs
+LOG="var/logs/weekly_knowledge_$(date +%Y%m%d).log"
+PY=/usr/bin/python3
+[ -x "$PY" ] || PY="$(command -v python3)"
+{
+  echo "== $(date '+%F %T') 레시피 수집 ($PY)"; "$PY" scripts/update_recipes.py; echo "== 레시피 exit=$?"
+  echo "== $(date '+%F %T') 보관법 수집"; "$PY" scripts/update_storage_guides.py; echo "== 보관법 exit=$?"
+} >> "$LOG" 2>&1

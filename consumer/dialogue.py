@@ -21,6 +21,7 @@ from shared import store
 from shared.decision_ledger import LedgerEntry, invalidated, open_entry
 from shared import persona
 from shared import recipe_catalog
+from shared import storage_guides
 from consumer import presenter
 
 
@@ -139,6 +140,15 @@ class DialogueManager:
                 s.slots.update(new.slots)
             intent = Intent(action=new.action, context=new.context, slots=dict(s.slots),
                             confidence=new.confidence, source=new.source)
+
+        if intent.action == "storage_info":
+            # 보관·손질·고르는 법: 농사로 공공 자료만 사용 (없으면 '찾지 못함')
+            s.stage = Stage.CLARIFY
+            s.last_items = []
+            raw = (message or chip or "").strip()
+            hit = storage_guides.find(raw)
+            guide, asked = (hit if hit else (None, (intent.slots.get("product") or "").split(" ")[0]))
+            return self._reply(s, presenter.storage_blocks(guide, asked, recipe_catalog.available()), intent=intent)
 
         if intent.action == "recipe":
             s.stage = Stage.CLARIFY

@@ -423,3 +423,25 @@ def recipe_detail_blocks(r: dict) -> list[Block]:
         blocks.append(Block(type="chips", data={"mode": "message",
                                                 "items": [{"label": f"{n} 사러 가기", "value": f"{n} 추천해줘"} for n in shop]}))
     return blocks
+
+
+
+# ── 식재료 보관·손질 (농사로 공공 자료) ─────────────────────────────
+def storage_blocks(guide: dict | None, asked: str, recipes_available: bool = False) -> list[Block]:
+    word = asked or (guide or {}).get("name") or "이 식재료"
+    chips = [{"label": f"{word} 상품 보기", "value": f"{word} 추천해줘"}]
+    if recipes_available:
+        chips.append({"label": f"{word} 레시피", "value": f"{word} 레시피 알려줘"})
+    if not guide:
+        return [text_block(f"**{word}** 보관·손질 방법은 확인된 공공 자료(농촌진흥청 농사로)에서 찾지 못했어요. "
+                           "근거 없는 보관 기간이나 방법은 안내하지 않을게요. 상품 페이지의 보관 안내를 함께 확인해 주세요."),
+                Block(type="chips", data={"mode": "message", "items": chips})]
+    md = [f"**{word} 보관·손질 방법**"]
+    if guide.get("name") and guide["name"] != word:
+        md.append(f"공공 자료의 **{guide['name']}** 항목 기준이에요.")
+    for key, title in (("storage", "보관법"), ("prep", "손질법"), ("purchase", "고르는 법")):
+        rows = guide.get(key) or []
+        if rows:
+            md += ["", f"**{title}**"] + [f"- {r}" for r in rows]
+    md += ["", f"출처: {guide.get('source_name') or '농촌진흥청 농사로'} (원문 내용 그대로 옮겼어요)"]
+    return [text_block("\n".join(md)), Block(type="chips", data={"mode": "message", "items": chips})]
