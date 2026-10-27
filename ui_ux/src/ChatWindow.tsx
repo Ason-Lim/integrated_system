@@ -9,32 +9,12 @@ import type { Message } from './types';
 import type { Candidate } from './types/blocks';
 import { sendChat } from './api/client';
 
-// 1. 아이콘 매핑 (JSON의 icon 필드와 lucide-react 아이콘 연결)
-const iconMap: Record<string, any> = {
-    Gift: Gift, Cookie: Cookie, Utensils: Utensils, Leaf: Leaf, ShoppingBag: ShoppingBag, Sparkles: Sparkles
-};
-
-// 2. 폴더 내 모든 trend_examples_*.json 파일 로드
-const trendModules = import.meta.glob('./data/trend_examples_*.json', { eager: true });
-
-// 3. 파일명 기준 내림차순 정렬하여 가장 최신 파일 찾기
-const sortedPaths = Object.keys(trendModules).sort().reverse();
-const latestPath = sortedPaths[0];
-const latestData: any = latestPath ? (trendModules[latestPath] as any).default : [];
-
-// 4. 최신 JSON 데이터를 기반으로 examples 배열 동적 생성 (폴백 포함)
-const examples = latestData.length > 0
-    ? latestData.map((item: any) => ({
-        icon: iconMap[item.icon] || ShoppingBag,
-        label: item.category || '추천',
-        text: item.question,
-        note: item.keyword || '맞춤 추천'
-    }))
-    : [
-        { icon: ShoppingBag, label: '취향에 맞는 상품 찾기', text: '두바이 쫀득쿠키 추천해줘', note: '가격부터 배송까지 한 번에' },
-        { icon: SlidersHorizontal, label: '조건부터 함께 정하기', text: '모니터를 사고 싶어요', note: '나에게 중요한 기준을 먼저' },
-        { icon: Utensils, label: '레시피로 장보기', text: '파스타 레시피로 장보기', note: '있는 재료는 빼고, 필요한 만큼' }
-    ];
+const examples = [
+    { icon: Gift, label: '선물용', text: '부모님 선물로 좋은 식품 추천해줘', note: '받는 분 취향까지 고려해서' },
+    { icon: Cookie, label: '간식/디저트', text: '두바이 쫀득쿠키 추천해줘', note: '가격부터 배송까지 한 번에' },
+    { icon: Utensils, label: '레시피/요리', text: '파스타 레시피로 장보기', note: '있는 재료는 빼고, 필요한 만큼' },
+    { icon: Leaf, label: '캠핑', text: '캠핑 갈 때 챙길 먹거리 추천해줘', note: '보관·조리 편의까지 함께' }
+];
 
 export default function ChatWindow() {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -142,9 +122,8 @@ export default function ChatWindow() {
                         </p>
 
                         {/* 예시 질문 버튼 렌더링 영역 (모바일 1열, PC 2x2 그리드) */}
-                        {/* 예시 질문 버튼 렌더링 영역 (모바일 1열, PC 2x2 그리드) */}
                         <div className="mt-9 grid gap-3 grid-cols-1 sm:grid-cols-2">
-                            {examples.map(({ icon: Icon, ...item }: any) => {
+                            {examples.map(({ icon: Icon, ...item }) => {
                                 return (
                                     <button key={item.text} onClick={() => submit(item.text)} className="group flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-sm">
                                         <div>
