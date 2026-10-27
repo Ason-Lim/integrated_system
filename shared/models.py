@@ -99,6 +99,7 @@ class ScoredOffer(BaseModel):
     decision: dict[str, Any] = Field(default_factory=dict)
     rankable: bool = True                                  # False → 비교·순위 대상 아님
     not_rankable_reason: str | None = None
+    food24: dict[str, Any] | None = None                   # 식약처 품목제조보고(식품정보24) 매칭 결과
 
 
 # ── 화면 블록 (server-driven UI) ──────────────────────────────

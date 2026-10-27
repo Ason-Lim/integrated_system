@@ -22,7 +22,7 @@ from shared.logistics.shipping_agency import (
     total_landed_cost,
 )
 from shared.markets.base import MALL_LABELS, NO_RATING_MALLS
-from shared import affiliate
+from shared import affiliate, food24_catalog
 from shared.models import Block, Intent, ScoredOffer, notice_block, text_block
 
 RECIPIENT_KR = {"senior": "부모님", "friends": "친구", "business": "거래처", "kids": "아이", "partner": "연인", "self": "나"}
@@ -79,6 +79,8 @@ def card(so: ScoredOffer, rank: int, ledger: LedgerEntry | None = None) -> dict:
         # 평점·후기·도착일을 판매처 API가 주지 않으면 '판매처에서 확인' 안내 (미확인 경고 아님)
         "check_at_mall": o.mall in NO_RATING_MALLS and o.rating is None,
         "delivery_hint": "로켓배송" if (o.raw or {}).get("isRocket") else None,
+        # 식약처 품목제조보고(식품정보24)와 제조사까지 맞는 경우에만 원재료·소비기한 근거를 싣는다
+        "public_info": _public_info(o.title),
         # 제휴(수수료) 링크 여부 — 카드·구매 버튼에 표기
         "affiliate": bool(o.url) and affiliate.is_affiliate(o.mall),
         "affiliate_program": affiliate.program(o.mall) if o.url else None,
@@ -88,6 +90,14 @@ def card(so: ScoredOffer, rank: int, ledger: LedgerEntry | None = None) -> dict:
         "missing_terms": o.missing_terms,
         **ledger_fields,
     }
+
+
+def _public_info(title: str) -> dict | None:
+    try:
+        rec = food24_catalog.match(title)
+    except Exception:
+        return None
+    return food24_catalog.public_info(rec) if rec and rec.get("company_matched") else None
 
 
 def _follow_up_chips(so: ScoredOffer) -> list[dict]:

@@ -221,6 +221,7 @@ class DialogueManager:
         s.stage = Stage.RECOMMEND
         s.last_items = items
         s.last_query = query
+        excluded = getattr(self.rec, "last_allergen_excluded", 0)
         blocks = presenter.recommendation_blocks(intent, items, active_malls=self.rec.markets.active,
                                                  country_code=s.country_code, ledger=s.ledger,
                                                  persona_unknown=s.persona.unknown if s.persona else None)
@@ -231,6 +232,10 @@ class DialogueManager:
             sp = None
         if sp and blocks:
             blocks.insert(1, presenter.specialty_note(sp))
+        if excluded and blocks:
+            blocks.insert(1, presenter.notice_block(
+                f"원재료(식약처 품목제조보고)에 해당 알레르기 성분이 표기된 상품 {excluded}개는 후보에서 뺐어요. "
+                "같은 시설 제조(교차오염) 여부는 상품 페이지에서 꼭 확인해 주세요.", "warn"))
         # "먹는 법 / 같이 살 거"를 함께 물었으면 공공 레시피(향토음식 등)로 답을 덧붙인다
         want_eat, want_pair = intent.slots.get("want_eat"), intent.slots.get("want_pairing")
         if (want_eat or want_pair) and blocks:

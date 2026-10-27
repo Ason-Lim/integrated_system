@@ -88,6 +88,9 @@ export interface ApiCard {
   /** 평점·후기·도착일을 판매처 API가 제공하지 않음 → 판매처에서 확인 안내 */
   check_at_mall?: boolean;
   delivery_hint?: string | null;
+  /** 식약처 품목제조보고(식품정보24) — 제조사까지 맞은 경우에만 */
+  public_info?: { name: string; company: string; item_type?: string; raw: string; expiry?: string | null;
+                  allergens: string[]; source: string } | null;
   detail?: ProductDetail;
 }
 

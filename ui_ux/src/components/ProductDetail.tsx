@@ -135,7 +135,8 @@ function SectionHead({ id, title, desc, tone }: { id: string; title: string; des
 
 function SourceLink({ s, label = "원문" }: { s?: SourceRef; label?: string }) {
   if (!s) return <span className="text-xs text-ink3">출처 없음</span>;
-  if (!s.url) return <span className="text-xs text-ink3" title={s.label}>{label} 링크 없음</span>;
+  // 공공데이터처럼 링크 없는 출처는 출처 이름을 그대로 보여준다
+  if (!s.url) return <span className="whitespace-nowrap text-xs text-ink3" title={s.label}>{s.label}</span>;
   return (
     <a href={s.url} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-xs font-semibold text-review underline underline-offset-2">
       {label} ↗

@@ -11,4 +11,5 @@ PY=/usr/bin/python3
   echo "== $(date '+%F %T') 보관법 수집"; "$PY" scripts/update_storage_guides.py; echo "== 보관법 exit=$?"
   echo "== $(date '+%F %T') 지역특산물·농가맛집 수집"; "$PY" scripts/update_local_knowledge.py; echo "== 지역정보 exit=$?"
   echo "== $(date '+%F %T') 쇼핑커넥트 발급 후보 목록"; "$PY" scripts/build_connect_candidates.py; echo "== 후보목록 exit=$?"
+  # 식품정보24 일반식품 API는 114만 건을 10건씩만 제공해 주간 전체 수집은 하지 않는다 (2026-10-27)
 } >> "$LOG" 2>&1

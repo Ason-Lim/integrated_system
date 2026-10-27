@@ -4,6 +4,7 @@ intent ─▶ 검색어 생성 ─▶ (commerce_ai 엔진 | 마켓 검색 + 기�
 """
 from __future__ import annotations
 
+from shared import food24_catalog
 from shared.config import Settings, get_settings
 from shared.engines import simple_ranker
 from shared.engines.commerce_ai_adapter import CommerceAIEngine
@@ -82,13 +83,32 @@ class Recommender:
             ranked.sort(key=lambda x: x.offer.total_price or x.offer.price)
         # Sponsorship never changes the organic order; only decidable offers lead.
         ranked = [x for x in ranked if not x.offer.is_sponsored]
+        allergen = intent.slots.get("allergen")
+        self.last_allergen_excluded = 0
+        if allergen and food24_catalog.available():
+            # 식약처 품목제조보고 원재료에 해당 알레르기 성분이 있는 상품은 후보에서 뺀다 (보수적: 이름만 맞아도 제외)
+            keep = []
+            for x in ranked:
+                rec = food24_catalog.match(x.offer.title)
+                if rec and allergen in rec["allergens"]:
+                    self.last_allergen_excluded += 1
+                    continue
+                x.food24 = rec
+                keep.append(x)
+            ranked = keep
         for x in ranked:
             x.decision = assess(x.offer)
-            if intent.slots.get("allergen"):
+            if allergen:
                 x.decision["status"] = "NOT_RANKABLE"
                 x.decision["missing"].append("allergen_source_verification")
                 x.decision["next_evidence"].append("allergen_source_verification")
-                x.unverified.append("알레르기 성분·교차오염 원문 확인")
+                rec = getattr(x, "food24", None)
+                if rec and rec.get("company_matched"):
+                    label = food24_catalog.ALLERGEN_RULES[allergen]["label"]
+                    x.evidence.append(f"원재료에 {label} 표기 없음 (식약처 품목제조보고)")
+                    x.unverified.append("같은 시설 제조(교차오염) 표시")
+                else:
+                    x.unverified.append("알레르기 성분·교차오염 원문 확인")
             if x.decision["status"] != "RANKABLE":
                 x.rankable = False
                 x.not_rankable_reason = x.not_rankable_reason or "구매조건 근거 부족"

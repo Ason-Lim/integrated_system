@@ -56,6 +56,12 @@ export function cardToCandidate(c: ApiCard): Candidate {
         ...(c.spec ? [{ label: "규격", value: c.spec, source: { label: c.source ?? "판매처", url: c.url } }] : []),
         { label: "상품가", value: won(c.price), source: { label: c.source ?? "판매처", url: c.url } },
         { label: "배송비", value: ship == null ? "판매자 표기 확인 필요" : won(ship), source: { label: c.source ?? "판매처", url: c.url } },
+        // 식약처 품목제조보고 (식품정보24) — 제조사·품목명이 맞는 경우에만 백엔드가 내려준다
+        ...(c.public_info ? [
+          { label: "원재료", value: c.public_info.raw, source: { label: "식약처 품목제조보고" } },
+          ...(c.public_info.expiry ? [{ label: "소비기한", value: c.public_info.expiry, source: { label: "식약처 품목제조보고" } }] : []),
+          ...(c.public_info.allergens.length ? [{ label: "알레르기", value: `원재료에 ${c.public_info.allergens.join(", ")} 포함`, source: { label: "식약처 품목제조보고" } }] : []),
+        ] : []),
       ],
       reviews: null,
       notes: ["리뷰 요약은 상품 상세 API 연결 후 표시됩니다."],
