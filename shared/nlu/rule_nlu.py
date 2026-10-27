@@ -48,7 +48,15 @@ STOPWORDS = {
     "어때", "어떻게", "궁금", "궁금해", "나아", "나은", "낫나", "어디", "산지", "지역", "품종", "종류",
     # 보관·손질 질문에 붙는 말 (예: "대봉감 홍시 만들려면 며칠 두고 어떻게 보관해?")
     "보관", "보관해", "보관법", "보관방법", "방법", "손질", "손질법", "며칠", "두고", "고르는", "고르는법", "요령",
+    "특산물", "특산품", "명물", "농가맛집", "향토음식", "종가음식",
+    # 먹는 법·곁들임 질문에 붙는 말 (예: "과메기 비린내 없이 먹는 법이랑 같이 살 거")
+    "비린내", "없이", "같이", "먹는", "먹는법", "법이랑", "법", "곁들일", "곁들여", "사보는", "사봐",
 }
+# 지역 정보 질문 신호 (특산물·농가맛집·향토음식). '찹쌀떡 맛집'처럼 쇼핑몰 뜻의 '맛집'은 제외
+LOCAL_CUES = re.compile(r"특산물|특산품|명물|농가\s*맛집|향토\s*음식|종가\s*음식|가면\s*뭐\s*(?:먹|사)")
+# 구매와 함께 묻는 '먹는 법' / '같이 살 거(곁들임)' 신호 — 추천은 그대로 하고 정보 블록을 덧붙인다
+EAT_CUES = re.compile(r"먹는\s*법|어떻게\s*먹|먹는\s*방법")
+PAIR_CUES = re.compile(r"같이\s*(?:살|사|먹|곁들)|곁들|함께\s*(?:살|사|먹)")
 # 보관·손질·고르는 법 질문 신호 (구매가 아닌 식재료 정보 질문)
 STORAGE_CUES = re.compile(
     r"보관|손질|세척|씻는\s*법|씻어야|고르는\s*(?:법|방법|요령|지)|구입\s*요령|며칠\s*(?:두|가|보관)|얼려도|냉동해도"
@@ -199,6 +207,10 @@ def parse(text: str) -> Intent:
         slots["_expansion"] = exp
         log_unsupported(text, exp, source="rule_nlu")
 
+    if EAT_CUES.search(text):
+        slots["want_eat"] = True
+    if PAIR_CUES.search(text):
+        slots["want_pairing"] = True
     compare = bool(COMPARE_CUES.search(text))
     if compare:
         slots["question"] = "compare"
@@ -212,6 +224,8 @@ def parse(text: str) -> Intent:
         action = "compare_info"
     elif STORAGE_CUES.search(text):
         action = "storage_info"
+    elif LOCAL_CUES.search(text) and not any(w in text for w in ["레시피", "요리법", "만드는"]) and "선물" not in text:
+        action = "local_info"
     elif mall:
         action = "recommend_in_mall"
     elif allergen:

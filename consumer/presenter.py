@@ -11,6 +11,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from datetime import datetime, timezone
 
 from shared.decision_ledger import LedgerEntry, refresh_needed
@@ -19,7 +21,8 @@ from shared.logistics.shipping_agency import (
     ShippingRequest,
     total_landed_cost,
 )
-from shared.markets.base import MALL_LABELS
+from shared.markets.base import MALL_LABELS, NO_RATING_MALLS
+from shared import affiliate
 from shared.models import Block, Intent, ScoredOffer, notice_block, text_block
 
 RECIPIENT_KR = {"senior": "부모님", "friends": "친구", "business": "거래처", "kids": "아이", "partner": "연인", "self": "나"}
@@ -73,6 +76,12 @@ def card(so: ScoredOffer, rank: int, ledger: LedgerEntry | None = None) -> dict:
         "spec": o.spec, "reason": so.reason, "evidence": so.evidence, "unverified": so.unverified,
         "source": mall, "observed": when, "stale": stale, "url": o.url, "is_sample": o.is_sample,
         "cta": f"{mall}에서 보기" if o.url else "예시 데이터 (링크 없음)",
+        # 평점·후기·도착일을 판매처 API가 주지 않으면 '판매처에서 확인' 안내 (미확인 경고 아님)
+        "check_at_mall": o.mall in NO_RATING_MALLS and o.rating is None,
+        "delivery_hint": "로켓배송" if (o.raw or {}).get("isRocket") else None,
+        # 제휴(수수료) 링크 여부 — 카드·구매 버튼에 표기
+        "affiliate": bool(o.url) and affiliate.is_affiliate(o.mall),
+        "affiliate_program": affiliate.program(o.mall) if o.url else None,
         # Merchant Decision Sufficiency (shadow)
         "rankable": so.rankable, "not_rankable_reason": so.not_rankable_reason,
         "rankability": o.rankability, "evidence_coverage": o.evidence_coverage,
@@ -255,9 +264,15 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
             tips.append("예산 범위를 넓혀")
         if s.get("mall"):
             tips.append("구매처 제한을 풀어")
-        return [text_block(f"**{product}** 조건에 맞는 상품을 찾지 못했어요."
-                           + (f" {' / '.join(tips)} 다시 찾아볼까요?" if tips else " 다른 표현으로 알려주시겠어요?")),
-                Block(type="clarify_form", data=_form(s, items, force_budget=True))]
+        first = (product.split() or [product])[0]
+        blocks = [text_block(f"**{product}** 조건에 맞는 상품을 찾지 못했어요."
+                             + (f" {' / '.join(tips)} 다시 찾아볼까요?" if tips else " 다른 표현으로 알려주시겠어요?"))]
+        if tips:   # 예산·구매처 조건이 있을 때만 조건 조정 질문이 의미 있다
+            blocks.append(Block(type="clarify_form", data=_form(s, items, force_budget=True)))
+        elif first and first != product:
+            blocks.append(Block(type="chips", data={"mode": "message",
+                                                    "items": [{"label": f"'{first}'로 다시 찾기", "value": f"{first} 추천해줘"}]}))
+        return blocks
 
     mall = MALL_LABELS.get(s.get("mall") or "", "")
     ctx = []
@@ -327,8 +342,7 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
         blocks.append(Block(type="verdict", data={"md": f"우선 비교할 후보는 **{top.offer.title}**입니다. {why}."}))
     else:
         blocks.append(notice_block("현재는 탐색 후보입니다. 옵션·배송·반품·출처가 확인되기 전에는 최종 추천을 확정하지 않습니다.", "warn"))
-    if any(x.offer.url for x in items):
-        blocks.append(notice_block("일부 구매 링크에서 수수료가 발생할 수 있으며 무료 서비스 운영에 도움이 됩니다. 협력 여부는 일반 추천 순위에 반영하지 않습니다."))
+    # 수수료 고지는 응답 '첫 부분'에 넣는다 (with_disclosure, DialogueManager._reply 에서 공통 처리)
 
     # 해외 사용자(KR 이 아닌 국가 코드가 확인된 경우)에게만 배송 대행 옵션 노출
     if country_code and country_code.upper() != "KR":
@@ -365,7 +379,7 @@ def _form(s: dict, items: list[ScoredOffer], force_budget: bool = False,
 # ── 레시피 (공공 레시피 DB 원문) ─────────────────────────────────
 # 장보기 칩에서 뺄 기본 양념·물 (대부분 집에 있어 상품 검색 가치가 낮다)
 PANTRY = {"물", "소금", "설탕", "후추", "후춧가루", "식용유", "참기름", "들기름", "간장", "진간장", "국간장",
-          "다진마늘", "마늘", "올리브유", "식초", "참깨", "깨소금", "통깨", "맛술", "물엿", "올리고당", "고춧가루"}
+          "다진마늘", "마늘", "올리브유", "식초", "소금물", "깨소금", "참깨", "깨소금", "통깨", "맛술", "물엿", "올리고당", "고춧가루"}
 
 
 def _pantry(name: str) -> bool:
@@ -373,11 +387,15 @@ def _pantry(name: str) -> bool:
 
 
 def _recipe_facts(r: dict) -> str:
-    bits = [r.get("category"), r.get("method"), r.get("time"), r.get("servings"), r.get("level")]
+    def last(v):  # '주식류 · 밥류 · 밥류 · 잡곡밥' → '잡곡밥' (분류 경로는 마지막 단계만)
+        parts = [p.strip() for p in re.split(r"[·>]", str(v or "")) if p.strip()]
+        return parts[-1] if parts else None
+    bits = [r.get("region"), r.get("house"), last(r.get("category")), last(r.get("method")),
+            r.get("time"), r.get("servings"), r.get("level")]
     kcal = r.get("kcal")
     if kcal:
         bits.append(kcal if "cal" in str(kcal).lower() else f"{kcal}kcal")
-    return " · ".join(str(b) for b in bits if b)
+    return " · ".join(dict.fromkeys(str(b) for b in bits if b))
 
 
 def recipe_list_blocks(query_terms: list[str], recipes: list[dict]) -> list[Block]:
@@ -402,7 +420,7 @@ def recipe_detail_blocks(r: dict) -> list[Block]:
     if facts:
         md.append(facts)
     if r.get("summary"):
-        md.append(r["summary"][:200])
+        md.append(r["summary"][:400])
     ings = r.get("ingredients") or []
     md.append("")
     md.append("**재료**")
@@ -414,8 +432,13 @@ def recipe_detail_blocks(r: dict) -> list[Block]:
         md.append("")
         md.append("**만드는 법**")
         md += [f"- {n}) {st['text']}" for n, st in enumerate(r["steps"], 1)]
+    if r.get("tip"):
+        md += ["", f"**참고** {r['tip']}"]
     md.append("")
-    md.append(f"출처: {r.get('source_name') or '공공 레시피 DB'} (원문 그대로 옮겼어요. 분량은 출처 기준 인분입니다)")
+    src = r.get("source_name") or "공공 레시피 DB"
+    if r.get("literature"):
+        src += f" · 문헌: {r['literature']}"
+    md.append(f"출처: {src} (원문 그대로 옮겼어요. 분량은 출처 기준입니다)")
     shop = [i["name"] for i in ings if not _pantry(i["name"])][:5]
     blocks = [text_block("\n".join(md))]
     if shop:
@@ -439,9 +462,111 @@ def storage_blocks(guide: dict | None, asked: str, recipes_available: bool = Fal
     md = [f"**{word} 보관·손질 방법**"]
     if guide.get("name") and guide["name"] != word:
         md.append(f"공공 자료의 **{guide['name']}** 항목 기준이에요.")
-    for key, title in (("storage", "보관법"), ("prep", "손질법"), ("purchase", "고르는 법")):
+    for key, title in (("storage", "보관법"), ("prep", "손질법"), ("eat", "먹는 법"), ("purchase", "고르는 법")):
         rows = guide.get(key) or []
         if rows:
             md += ["", f"**{title}**"] + [f"- {r}" for r in rows]
     md += ["", f"출처: {guide.get('source_name') or '농촌진흥청 농사로'} (원문 내용 그대로 옮겼어요)"]
     return [text_block("\n".join(md)), Block(type="chips", data={"mode": "message", "items": chips})]
+
+
+
+# ── 지역 정보 (농사로 지역특산물·농가맛집·향토/종가음식) ─────────────
+ASK_REGIONS = ["경북 특산물", "전남 특산물", "강원 특산물", "제주 특산물"]
+
+
+def local_blocks(region: str | None, specialties: list[dict], restaurants: list[dict],
+                 recipes: list[dict], data_ready: bool) -> list[Block]:
+    if not region:
+        msg = ("어느 지역이 궁금하세요? 시군 이름(예: 문경, 안동)이나 도 이름으로 물어봐 주세요."
+               if data_ready else "지역 정보(농사로 지역특산물·농가맛집)가 아직 준비되지 않았어요.")
+        return [text_block(msg), Block(type="chips", data={"mode": "message", "items": ASK_REGIONS})]
+    if not (specialties or restaurants or recipes):
+        return [text_block(f"**{region}** 지역의 특산물·농가맛집을 공공 자료(농촌진흥청 농사로)에서 찾지 못했어요.")]
+    md = [f"**{region}** 지역 정보예요."]
+    if specialties:
+        md += ["", "**지역특산물**"] + [f"- {r['name']} ({r['region']})" for r in specialties[:10]]
+        if len(specialties) > 10:
+            md.append(f"- 외 {len(specialties) - 10}개")
+    if restaurants:
+        md += ["", "**농가맛집**"]
+        for r in restaurants[:3]:
+            from shared.local_knowledge import menu_names
+            # API 대표메뉴 필드가 짧은 메뉴명이면 그대로, 아니면 본문의 '대표 상차림' 제목들
+            menus = [r["menu"]] if r.get("menu") and len(r["menu"]) <= 40 else menu_names(r)
+            bits = [r.get("address"), f"대표메뉴 {', '.join(menus)}" if menus else None,
+                    r.get("hours"), f"휴무 {r['closed']}" if r.get("closed") else None, r.get("tel")]
+            md.append(f"- **{r['name']}** — " + " · ".join(b for b in bits if b))
+    if recipes:
+        md += ["", "**이 지역의 향토·종가음식**"] + [f"- {r['name']}" + (f" ({r['house']})" if r.get("house") else "")
+                                               for r in recipes]
+    md += ["", "출처: 농촌진흥청 농사로 지역특산물·농가맛집·향토음식 (영업 정보는 방문 전 확인해 주세요)"]
+    chips = [{"label": f"{r['name']} 사러 가기", "value": f"{region} {r['name']} 추천해줘"} for r in specialties[:3]]
+    chips += [{"label": f"{r['name']} 레시피", "value": f"{r['name']} 레시피 보기"} for r in recipes[:2]]
+    blocks = [text_block("\n".join(md))]
+    if chips:
+        blocks.append(Block(type="chips", data={"mode": "message", "items": chips}))
+    return blocks
+
+
+def specialty_note(sp: dict) -> Block:
+    return text_block(f"참고: **{sp['name']}**은(는) 농촌진흥청 농사로 지역특산물에 등록된 **{sp['region']}** 특산물이에요.")
+
+
+
+# ── 제휴 링크 고지 (응답 첫 부분) ─────────────────────────────────
+
+
+def _malls_in(blocks: list[Block]) -> list[str]:
+    malls: list[str] = []
+    def walk(x):
+        if isinstance(x, dict):
+            if x.get("url") and x.get("mall"):
+                malls.append(x["mall"])
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    for b in blocks:
+        if b.type in ("product_list", "comparison_pair", "candidate_compare", "sponsored_list"):
+            walk(b.data)
+    return malls
+
+
+def with_disclosure(blocks: list[Block]) -> list[Block]:
+    """제휴 링크가 있는 응답이면 맨 앞에 고지 블록을 붙인다 (이미 있으면 그대로)."""
+    if any(b.type == "notice" and (b.data or {}).get("affiliate") for b in blocks):
+        return blocks
+    text = affiliate.disclosure(_malls_in(blocks))
+    if not text:
+        return blocks
+    return [Block(type="notice", data={"md": text, "tone": "info", "affiliate": True})] + blocks
+
+
+
+def recipe_not_found_blocks(word: str) -> list[Block]:
+    return [text_block(f"**{word}** 레시피를 공공 레시피 DB(식품안전나라·농식품정보누리·농사로)에서 찾지 못했어요. "
+                       "다른 요리 이름이나 재료로 물어봐 주시거나, 가지고 계신 레시피 원문을 알려주시면 필요한 재료를 계산해 드릴게요."),
+            Block(type="chips", data={"mode": "message", "items": [
+                {"label": f"{word} 상품 보기", "value": f"{word} 추천해줘"},
+                {"label": f"{word} 보관법", "value": f"{word} 보관 어떻게 해?"}]})]
+
+
+
+# ── 구매 + '먹는 법·같이 살 거' (공공 레시피 근거) ─────────────────
+def eat_pairing_blocks(product: str, recipe: dict, want_eat: bool, want_pairing: bool) -> list[Block]:
+    md = [f"**{product} 먹는 법·곁들임** ({recipe.get('source_name') or '공공 레시피 DB'} '{recipe['name']}' 기준)"]
+    if want_eat and recipe.get("steps"):
+        md += [f"- {n}) {st['text']}" for n, st in enumerate(recipe["steps"][:5], 1)]
+    key = product.replace(" ", "")
+    sides = [i["name"] for i in recipe.get("ingredients", [])
+             if not _pantry(i["name"]) and key not in i["name"].replace(" ", "") and i["name"].replace(" ", "") not in key][:5]
+    blocks = []
+    if sides:
+        md.append(f"함께 준비하면 좋은 재료: {', '.join(sides)}")
+    blocks.append(text_block("\n".join(md)))
+    chips = [{"label": f"{n} 사러 가기", "value": f"{n} 추천해줘"} for n in (sides if want_pairing else [])[:4]]
+    chips.append({"label": f"{recipe['name']} 레시피 전체", "value": f"{recipe['name']} 레시피 보기"})
+    blocks.append(Block(type="chips", data={"mode": "message", "items": chips}))
+    return blocks

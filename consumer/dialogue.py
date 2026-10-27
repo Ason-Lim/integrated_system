@@ -22,6 +22,7 @@ from shared.decision_ledger import LedgerEntry, invalidated, open_entry
 from shared import persona
 from shared import recipe_catalog
 from shared import storage_guides
+from shared import local_knowledge
 from consumer import presenter
 
 
@@ -150,6 +151,21 @@ class DialogueManager:
             guide, asked = (hit if hit else (None, (intent.slots.get("product") or "").split(" ")[0]))
             return self._reply(s, presenter.storage_blocks(guide, asked, recipe_catalog.available()), intent=intent)
 
+        if intent.action == "local_info":
+            # 지역특산물·농가맛집·향토/종가음식 (농사로 공공 자료)
+            s.stage = Stage.CLARIFY
+            s.last_items = []
+            raw = (message or chip or "").strip()
+            region = local_knowledge.find_region(raw)
+            want_food = any(w in raw for w in ["맛집", "먹"])
+            want_goods = any(w in raw for w in ["특산", "명물", "사"]) or not want_food
+            spc = [r for r in local_knowledge.in_region(local_knowledge.specialties(), region)
+                   if local_knowledge.is_food(r)] if region and want_goods else []
+            frm = local_knowledge.in_region(local_knowledge.restaurants(), region) if region else []
+            rcp = recipe_catalog.by_region(region) if region else []
+            return self._reply(s, presenter.local_blocks(region, spc, frm, rcp, local_knowledge.available()),
+                               intent=intent)
+
         if intent.action == "recipe":
             s.stage = Stage.CLARIFY
             s.last_items = []
@@ -167,6 +183,16 @@ class DialogueManager:
             found = recipe_catalog.search(query, limit=3)
             if found:
                 return self._reply(s, presenter.recipe_list_blocks(recipe_catalog.terms(query), found), intent=intent)
+            if recipe_catalog.available():
+                # 품종명('대봉감')은 상위 품목('감')을 재료로 쓰는 레시피로 찾아본다
+                words = recipe_catalog.terms(query)
+                hit = storage_guides.find(raw)
+                names = words + ([hit[0]["name"]] + list(hit[0].get("aliases") or []) if hit else [])
+                alt = recipe_catalog.by_ingredient(names, limit=3)
+                if alt:
+                    label = [hit[0]["name"]] if hit else words
+                    return self._reply(s, presenter.recipe_list_blocks(label, alt), intent=intent)
+                return self._reply(s, presenter.recipe_not_found_blocks(" ".join(words) or query), intent=intent)
             return self._reply(s, [presenter.text_block("원문 레시피와 보유 재료를 확인하겠습니다. 요리 이름·인분 수·레시피 원문 또는 출처를 알려주세요. 재료는 필수/선택으로 구분하고 단위와 조리 상태를 확인한 뒤 부족분만 계산합니다." )], intent=intent)
 
         if not intent.slots.get("product"):
@@ -198,6 +224,21 @@ class DialogueManager:
         blocks = presenter.recommendation_blocks(intent, items, active_malls=self.rec.markets.active,
                                                  country_code=s.country_code, ledger=s.ledger,
                                                  persona_unknown=s.persona.unknown if s.persona else None)
+        # 지역+품목이 농사로 지역특산물과 맞으면 근거 한 줄 (지역 없는 품목에는 붙이지 않음)
+        try:
+            sp = local_knowledge.specialty_for(intent.slots.get("product") or "")
+        except Exception:
+            sp = None
+        if sp and blocks:
+            blocks.insert(1, presenter.specialty_note(sp))
+        # "먹는 법 / 같이 살 거"를 함께 물었으면 공공 레시피(향토음식 등)로 답을 덧붙인다
+        want_eat, want_pair = intent.slots.get("want_eat"), intent.slots.get("want_pairing")
+        if (want_eat or want_pair) and blocks:
+            main = (intent.slots.get("product") or "").split(" ")[0]
+            rec = next((r for r in recipe_catalog.search(main, limit=5) if main in r.get("name", "")), None) if main else None
+            if rec:
+                at = 2 if len(blocks) > 1 else 1
+                blocks[at:at] = presenter.eat_pairing_blocks(main, rec, bool(want_eat), bool(want_pair))
         return self._reply(s, blocks, intent=intent)
 
     # ── EXPLORE: follow_up 칩에 대한 규칙 기반 즉시 응답 ─────────────
@@ -320,6 +361,7 @@ class DialogueManager:
         ])
 
     def _reply(self, s: Session, blocks: list[Block], intent: Intent | None = None) -> dict:
+        blocks = presenter.with_disclosure(blocks)   # 제휴 링크가 있으면 첫 부분에 수수료 고지
         ledger = s.ledger.to_dict() if s.ledger else None
         return {
             "session_id": s.id, "stage": s.stage.value, "slots": s.slots,

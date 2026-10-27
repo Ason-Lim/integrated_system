@@ -56,6 +56,13 @@ class Recommender:
             # 마켓 검색은 일치 상품이 없어도 인기 상품을 돌려줄 수 있다 (예: 사과 검색에 섬유유연제).
             # 상품어가 제목에 하나도 없는 후보는 랭킹 전에 제외하고, 0개면 '찾지 못함'으로 보낸다.
             kept = relevant_offers(offers, intent)
+            words = query.split()
+            if not kept and len(words) > 1:
+                # 긴 검색어로 0건이면 첫 상품어만으로 다시 찾는다 ('과메기 초장 세트' → '과메기')
+                offers = self.markets.search(words[0], malls=malls, limit=30)
+                kept = relevant_offers(offers, intent)
+                if kept:
+                    query = words[0]
             self.last_dropped_irrelevant = len(offers) - len(kept)
             ranked = simple_ranker.rank(kept, intent, query)
         # SAFE-QE: 검색 결과의 상품 근거(제목·스펙·설명)로 확장어를 재검증한다.
