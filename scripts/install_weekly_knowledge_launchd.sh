@@ -20,6 +20,6 @@ cat > "$PLIST" <<PL
 PL
 launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
-echo "등록 완료: 매주 월요일 10:20 → var/recipes/recipes.json, var/knowledge/storage_guides.json"
+echo "등록 완료: 매주 월요일 10:20 → var/recipes/recipes.json, var/knowledge/*.json (보관법·지역특산물·농가맛집)"
 launchctl print "gui/$(id -u)/$LABEL" | grep -E "state|run interval|Weekday" || true
 echo "지금 한 번 시험 실행하려면: launchctl kickstart -k gui/$(id -u)/$LABEL"

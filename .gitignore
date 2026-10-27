@@ -7,3 +7,6 @@ __pycache__/
 var/recipes/
 var/foodpolis/
 var/knowledge/
+var/affiliate/
+var/blog_drafts/
+_backup_before_restore_*/
