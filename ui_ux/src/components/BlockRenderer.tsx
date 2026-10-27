@@ -27,7 +27,7 @@ function BlockView({ block }: { block: Block }) {
     case "notice":
       return (
         <Markdown text={block.data.md}
-          className={`my-3 rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed ${block.data.tone === "warn" ? "bg-warnSoft text-warn" : "bg-chip text-ink2"}`} />
+          className={`my-3 rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed ${block.data.affiliate ? "border border-line bg-surface text-ink" : block.data.tone === "warn" ? "bg-warnSoft text-warn" : "bg-chip text-ink2"}`} />
       );
     case "verdict":
       return <Markdown text={block.data.md} className="my-4 border-l-[3px] border-accent pl-3 text-[16.5px]" />;

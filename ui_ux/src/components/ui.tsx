@@ -58,6 +58,17 @@ export function UnverifiedTags({ items, compact }: { items: string[]; compact?: 
   );
 }
 
+/** 판매처 API가 평점·후기·도착일을 주지 않을 때의 안내 (경고 아님) */
+export function MallCheckNote({ c }: { c: Candidate }) {
+  if (!c.checkAtMall && !c.deliveryHint) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink3">
+      {c.deliveryHint && <span className="tag bg-chip text-ink2">{c.deliveryHint}</span>}
+      {c.checkAtMall && <span>평점·후기·도착일은 {c.source} 상품 페이지에서 확인할 수 있어요</span>}
+    </p>
+  );
+}
+
 export function SourceMeta({ c }: { c: Candidate }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-ink3">

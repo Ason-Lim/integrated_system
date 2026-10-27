@@ -37,7 +37,8 @@ export function cardToCandidate(c: ApiCard): Candidate {
     unverified: [
       ...(c.unverified ?? []),
       ...(ship == null ? ["배송비"] : []),
-      ...(c.delivery_terms ? [] : ["도착 예정일"]),
+      // 도착 예정일은 판매처 API가 주지 않는 경우가 많아 '미확인' 경고 대신 카드의 안내 문구로 보여준다
+      ...(c.delivery_terms || c.check_at_mall ? [] : ["도착 예정일"]),
     ].filter((v, i, a) => a.indexOf(v) === i),
     badges: c.badges ?? [],
     observed: c.observed,
@@ -45,6 +46,10 @@ export function cardToCandidate(c: ApiCard): Candidate {
     url: c.url,
     isSample: c.is_sample,
     isSponsored: c.is_sponsored,
+    affiliate: c.affiliate,
+    affiliateProgram: c.affiliate_program,
+    checkAtMall: c.check_at_mall,
+    deliveryHint: c.delivery_hint,
     followUp: c.follow_up,
     detail: c.detail ?? {
       sellerFacts: [

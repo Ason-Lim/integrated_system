@@ -5,6 +5,10 @@ from typing import Protocol
 
 from shared.models import Offer
 
+# 검색 API가 평점·후기 수·도착 예정일을 제공하지 않는 판매처 (쿠팡 파트너스·네이버 쇼핑 검색).
+# 이런 값은 '미확인 경고'가 아니라 '판매처에서 확인' 안내로 보여준다.
+NO_RATING_MALLS = {"coupang", "naver"}
+
 MALL_LABELS = {
     "coupang": "쿠팡", "naver": "네이버", "emart": "이마트", "ssg": "SSG",
     "marketkurly": "컬리", "sample": "예시몰",

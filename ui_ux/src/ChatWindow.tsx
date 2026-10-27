@@ -159,6 +159,12 @@ export default function ChatWindow() {
                         <p className="mt-5 text-sm leading-7 text-stone-500 sm:text-base">
                             원하는 상품이나 만들고 싶은 요리를 말해 주세요.<br />중요한 조건을 확인하고, 비교하기 쉽게 정리해 드려요.
                         </p>
+                        {/* 제휴 수수료 고지 — 첫 화면 첫 부분 (공정위 추천·보증 심사지침, 쿠팡 파트너스 정책) */}
+                        <p className="mt-4 rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs leading-6 text-stone-600">
+                            <strong className="font-semibold text-ink">광고 · 제휴 링크 안내</strong>{' '}
+                            이 사이트는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
+                            수수료는 본 사이트 운영과 무료 서비스 유지에 도움이 되며, 추천 순위에는 반영하지 않습니다.
+                        </p>
 
                         {/* 예시 질문 버튼 렌더링 영역 (모바일 1열, PC 2x2 그리드) */}
                         <div className="mt-9 grid gap-3 grid-cols-1 sm:grid-cols-2">
@@ -223,7 +229,7 @@ export default function ChatWindow() {
                         )}
                     </div>
                 </form>
-                <p className="mt-3 text-center text-[10px] text-stone-400">가격·배송·리뷰는 확인 시점에 따라 달라질 수 있어요. 유료 소개는 별도 표시합니다.</p>
+                <p className="mt-3 text-center text-[10px] text-stone-400">쿠팡 파트너스 활동의 일환으로 일정액의 수수료를 제공받으며, 수수료는 본 사이트 운영에 도움이 됩니다. 가격·배송·리뷰는 확인 시점에 따라 달라질 수 있어요.</p>
             </footer>
 
             {detail && <ProductDetail key={detail.key} c={detail} sessionId={sessionId} purchasing={purchasing} onPurchasing={setPurchasing} onClose={closeDetail} />}

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import math
 
+from shared.markets.base import NO_RATING_MALLS
+
 from shared.assurance import assess
 from shared.models import Intent, Offer, ScoredOffer
 
@@ -39,15 +41,16 @@ def rank(offers: list[Offer], intent: Intent, query: str) -> list[ScoredOffer]:
     for o in offers:
         ev, un = [], []
         score = 40 * relevance(query, o.title)
+        provides_rating = o.mall not in NO_RATING_MALLS   # API가 원래 주지 않는 값은 '미확인'으로 표시하지 않음
         if o.rating is not None:
             score += 20 * max(0.0, (o.rating - 3.0) / 2.0)
             ev.append(f"평점 {o.rating:.1f}")
-        else:
+        elif provides_rating:
             un.append("평점")
         if o.review_count:
             score += min(20.0, 20 * math.log10(o.review_count + 1) / 4)
             ev.append(f"후기 약 {o.review_count:,}개")
-        else:
+        elif provides_rating:
             un.append("후기 수")
         price = o.total_price or o.price
         score += 20 * price_fit(price, s.get("budget_min"), s.get("budget_max"), s.get("priority"), pmin, pmax)

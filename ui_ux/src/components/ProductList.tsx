@@ -2,7 +2,7 @@ import type { Candidate, ProductListBlock, SponsoredListBlock } from "../types/b
 import { cardToCandidate } from "../api/adapt";
 import { cx } from "../lib/format";
 import { useChatActions } from "./ChatActions";
-import { SourceMeta, Thumb, TotalPrice, UnverifiedTags } from "./ui";
+import { MallCheckNote, SourceMeta, Thumb, TotalPrice, UnverifiedTags } from "./ui";
 
 /** 상품명 속 [빨간특가] 같은 대괄호 태그를 분리한다. */
 function splitTitle(title: string): { tags: string[]; name: string } {
@@ -39,9 +39,14 @@ function ProductCard({ c, sponsored }: { c: Candidate; sponsored?: boolean }) {
         <Thumb c={c} />
       </button>
       <div className="min-w-0 flex-1 space-y-2">
-        {(sponsored || tags.length > 0) && (
+        {(sponsored || c.affiliate || tags.length > 0) && (
           <div className="flex flex-wrap gap-1">
             {sponsored && <span className="tag bg-sponsorSoft text-sponsor">유료 소개</span>}
+            {!sponsored && c.affiliate && (
+              <span className="tag bg-chip text-ink2" title={`${c.affiliateProgram ?? "제휴"} 링크 — 구매 시 일정액의 수수료를 제공받습니다`}>
+                제휴 링크 · 수수료 제공
+              </span>
+            )}
             {tags.map((t) => <span key={t} className="tag bg-chip text-ink2">{t}</span>)}
           </div>
         )}
@@ -52,6 +57,7 @@ function ProductCard({ c, sponsored }: { c: Candidate; sponsored?: boolean }) {
         <TotalPrice c={c} size="lg" />
         {!sponsored && c.reasons[0] && <p className="text-sm leading-relaxed text-ink2">{c.reasons[0]}</p>}
         {unverified.length > 0 && <UnverifiedTags items={unverified} compact />}
+        <MallCheckNote c={c} />
         <SourceMeta c={c} />
       </div>
     </article>

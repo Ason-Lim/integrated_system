@@ -1,6 +1,6 @@
 import type { Candidate, CandidateCompareBlock } from "../types/blocks";
 import { useChatActions } from "./ChatActions";
-import { EvidenceTags, SourceMeta, Thumb, TotalPrice, UnverifiedTags } from "./ui";
+import { EvidenceTags, MallCheckNote, SourceMeta, Thumb, TotalPrice, UnverifiedTags } from "./ui";
 import { cx, won } from "../lib/format";
 
 /** 상품명 앞의 [빨간특기] 같은 대괄호 태그를 제거한다. */
@@ -63,10 +63,8 @@ export function CandidateCompare({ block }: { block: CandidateCompareBlock }) {
             </div>
 
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <span className="rounded-full bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 평점 미확인</span>
-              <span className="rounded-full bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 후기 수 미확인</span>
-              <span className="rounded-full bg-yellow-50 px-2 py-1 text-xs text-yellow-700">? 도착 예정일 미확인</span>
-              <UnverifiedTags items={c.unverified} compact />
+              {c.unverified.length > 0 && <UnverifiedTags items={c.unverified} compact />}
+              <MallCheckNote c={c} />
             </div>
 
             {c.reasons.length > 0 && (

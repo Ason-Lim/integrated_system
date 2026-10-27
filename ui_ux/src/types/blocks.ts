@@ -18,7 +18,7 @@ export interface ChipItem {
 /* ───────── 기존 블록 ───────── */
 
 export interface TextBlock { type: "text"; data: { md?: string; text?: string } }
-export interface NoticeBlock { type: "notice"; data: { md: string; tone?: "info" | "warn" } }
+export interface NoticeBlock { type: "notice"; data: { md: string; tone?: "info" | "warn"; affiliate?: boolean } }
 export interface VerdictBlock { type: "verdict"; data: { md: string } }
 
 export interface ChipsBlock {
@@ -82,6 +82,12 @@ export interface ApiCard {
   weight_g?: number | null;
   delivery_terms?: string | null;
   is_sponsored?: boolean;
+  /** 수수료가 발생하는 제휴 링크 (쿠팡 파트너스 등) */
+  affiliate?: boolean;
+  affiliate_program?: string | null;
+  /** 평점·후기·도착일을 판매처 API가 제공하지 않음 → 판매처에서 확인 안내 */
+  check_at_mall?: boolean;
+  delivery_hint?: string | null;
   detail?: ProductDetail;
 }
 
@@ -181,6 +187,10 @@ export interface Candidate {
   url?: string | null;
   isSample?: boolean;
   isSponsored?: boolean;
+  affiliate?: boolean;
+  affiliateProgram?: string | null;
+  checkAtMall?: boolean;
+  deliveryHint?: string | null;
   followUp?: ChipItem[];
   detail?: ProductDetail;
 }

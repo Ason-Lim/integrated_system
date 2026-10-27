@@ -95,6 +95,34 @@ def health():
     return {"status": "ok", "nlu": dm.nlu.mode, "engine": dm.rec.mode, "markets": dm.rec.markets.active}
 
 
+@app.get("/api/debug/markets")
+def debug_markets(q: str, request: Request):
+    """판매처별 검색 건수·오류 점검 (로컬 접속만). 예: /api/debug/markets?q=대봉감"""
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "localhost"}:
+        return {"error": "local only"}
+    out = {}
+    for a in dm.rec.markets.adapters:
+        if not a.enabled:
+            out[a.code] = {"enabled": False}
+            continue
+        try:
+            got = a.search(q, limit=10)
+            out[a.code] = {"enabled": True, "count": len(got),
+                           "sample": [{"title": o.title[:40], "price": o.price, "mall": o.mall_label} for o in got[:3]]}
+        except Exception as e:  # noqa: BLE001
+            body = getattr(getattr(e, "response", None), "text", "") or ""
+            out[a.code] = {"enabled": True, "error": f"{type(e).__name__}: {str(e)[:200]}", "body": body[:300]}
+    query, items = dm.rec.recommend(rule_intent(q), session_id=None)
+    out["_recommended"] = [{"mall": x.offer.mall, "score": x.score, "title": x.offer.title[:40]} for x in items]
+    return out
+
+
+def rule_intent(q: str):
+    from shared.nlu import rule_nlu
+    return rule_nlu.parse(q)
+
+
 @app.get("/api/decision/ledger/{sid}")
 def decision_ledger(sid: str):
     """세션의 Decision Freshness Ledger 조회 (shadow).

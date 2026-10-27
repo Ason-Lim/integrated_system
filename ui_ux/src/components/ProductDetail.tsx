@@ -228,5 +228,15 @@ function GoButton({ c, sessionId }: { c: Candidate; sessionId: string | null }) 
       </button>
     );
   }
-  return <a href={href} target="_blank" rel="noopener" className="primary-btn flex-1">{c.source}에서 결제하기 ↗</a>;
+  // 제휴(수수료) 링크는 rel="sponsored" 로 표시하고 버튼 바로 아래에 고지한다
+  return (
+    <div className="flex flex-1 flex-col gap-1">
+      <a href={href} target="_blank" rel={c.affiliate ? "sponsored noopener" : "noopener"} className="primary-btn">{c.source}에서 결제하기 ↗</a>
+      {c.affiliate && (
+        <p className="text-center text-[11px] leading-snug text-ink3">
+          {c.affiliateProgram ?? "제휴"} 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다. 수수료는 본 사이트 운영에 도움이 됩니다.
+        </p>
+      )}
+    </div>
+  );
 }
