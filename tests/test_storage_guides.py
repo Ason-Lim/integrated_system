@@ -25,7 +25,8 @@ def guides(tmp_path, monkeypatch):
                 "prep": list(prep), "purchase": list(purchase), "source_name": collector.SOURCE_NAME}
     doc = {"guides": [g(1, "딸기", ["랩을 씌워 보관"], ["흐르는 물에 씻는다"], ["광택이 있는 것"]),
                       g(2, "감(단감·대봉감)", ["홍시는 서늘한 곳에서 후숙"]),
-                      g(3, "감자", ["빛이 들지 않는 곳에 보관"])]}
+                      g(3, "감자", ["빛이 들지 않는 곳에 보관"]),
+                      g(4, "산딸기", ["바로 먹는다"])]}
     p = tmp_path / "storage_guides.json"
     p.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setenv("STORAGE_GUIDE_PATH", str(p))
@@ -67,3 +68,21 @@ def test_chat_says_not_found_without_inventing(guides):
     r = DialogueManager(persist=False).handle(None, message="과메기 손질 어떻게 해?")
     md = r["blocks"][0]["data"]["md"]
     assert "찾지 못했어요" in md and "과메기" in md
+
+
+def test_collector_reads_nongsaro_detail_fields():
+    f = {"fdmtNm": "딸기", "prchCheatDtl": "<p>- 광택이 있는 것</p>",
+         "cstdyMthDtl": "■ 보관법<br>- 랩을 씌워 보관<br>■ 손질법<br>- 흐르는 물에 씻는다",
+         "ntkMthDtl": "생과로 먹거나 잼으로", "ntrIrdntEfcyDtl": "비타민C"}
+    assert collector.parse_detail(f) == {"storage": ["랩을 씌워 보관"], "prep": ["흐르는 물에 씻는다"],
+                                         "purchase": ["광택이 있는 것"], "eat": ["생과로 먹거나 잼으로"]}
+
+
+def test_collector_ignores_non_text_fields():
+    assert collector.parse_detail({"fdmtNm": "쌀", "_month": 10, "cstdyMthDtl": "■ 보관법<br>- 밀봉해 서늘한 곳"}) == \
+        {"storage": ["밀봉해 서늘한 곳"]}
+
+
+def test_exact_name_beats_longer_partial(guides):
+    assert storage_guides.find("딸기 고르는 법")[0]["name"] == "딸기"      # '산딸기'가 아니라
+    assert storage_guides.find("산딸기 보관")[0]["name"] == "산딸기"

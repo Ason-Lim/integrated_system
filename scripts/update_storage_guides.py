@@ -5,7 +5,7 @@
 출력: var/knowledge/storage_guides.json   (서버는 이 파일만 읽는다)
 실행: venv/bin/python scripts/update_storage_guides.py            전체 수집
       venv/bin/python scripts/update_storage_guides.py --probe    응답 구조만 확인 (키는 출력하지 않음)
-      venv/bin/python scripts/update_storage_guides.py --since 2023 시작 연도 지정
+      venv/bin/python scripts/update_storage_guides.py --years 2016-2019 수집 연도 지정
 """
 from __future__ import annotations
 
@@ -25,10 +25,14 @@ SECTIONS = {
     "purchase": r"구입\s*요령|고르는\s*(?:법|방법|요령)|선택\s*요령",
     "storage": r"보관\s*(?:법|방법|요령)",
     "prep": r"손질\s*(?:법|방법|요령)|세척\s*(?:법|방법)",
+    "eat": r"섭취\s*(?:법|방법)|먹는\s*(?:법|방법)",
 }
 # 머리말이 없을 때 태그 이름으로 추정
-TAG_HINTS = {"purchase": ("purchs", "purch", "buy"), "storage": ("strg", "stor", "keep", "prsrv"),
-             "prep": ("trt", "trmng", "prpr", "clean")}
+# 실제 필드(농사로 샘플코드 기준): prchCheatDtl 구입요령, cstdyMthDtl 보관방법, ntkMthDtl 섭취방법
+TAG_HINTS = {"purchase": ("prch", "purchs"), "storage": ("cstdy", "strg", "stor"),
+             "prep": ("trmng", "prpr", "clean"), "eat": ("ntk",)}
+# 12개월이 다 찬 해는 2016~2019 (2015·2020·2023 일부, 2021~ 대부분 없음). 겹치는 항목은 이름으로 합친다.
+DEFAULT_YEARS = list(range(2015, 2024))
 ANY_HEAD = re.compile(r"[■□●◆▶]\s*([^\n■□●◆▶\-]{1,15})")
 
 
@@ -71,7 +75,7 @@ def header(root: ET.Element) -> tuple[str, str]:
 
 
 def clean_text(s: str) -> str:
-    s = html.unescape(s or "")
+    s = html.unescape(s if isinstance(s, str) else "")
     s = re.sub(r"<\s*br\s*/?>|</p>|</li>|</div>", "\n", s, flags=re.I)
     s = re.sub(r"<[^>]+>", "", s)
     s = s.replace("\r", "")
@@ -109,14 +113,14 @@ def split_sections(text: str) -> dict[str, list[str]]:
 
 def parse_detail(fields: dict) -> dict[str, list[str]]:
     sections: dict[str, list[str]] = {}
-    for tag, val in fields.items():          # 1) 본문 안의 ■ 머리말
+    for tag, val in fields.items():          # 1) 본문 안의 ■ 머리말 (예: 보관방법 필드 안의 '■ 손질법')
         for k, v in split_sections(val).items():
             sections.setdefault(k, v)
-    for k, hints in TAG_HINTS.items():        # 2) 머리말이 없으면 태그 이름으로
+    for k, hints in TAG_HINTS.items():        # 2) 필드 이름이 곧 항목인 경우 (머리말 없는 본문)
         if k in sections:
             continue
         for tag, val in fields.items():
-            if any(h in tag.lower() for h in hints) and clean_text(val):
+            if any(h in tag.lower() for h in hints) and clean_text(val) and not ANY_HEAD.search(clean_text(val)):
                 sections[k] = bullets(clean_text(val)) or [clean_text(val)]
                 break
     return sections
@@ -136,7 +140,9 @@ def _name_of(row: dict) -> str:
 
 def probe(key: str) -> None:
     today = date.today()
-    root = call("monthFdmtLst", key, thisYear=today.year, thisMonth=f"{today.month:02d}")
+    yl = call("monthFdYearLst", key, thisYear=today.year, thisMonth=f"{today.month:02d}")
+    print("조회 가능 연도:", [it.get("year") for it in items(yl)])
+    root = call("monthFdmtLst", key, thisYear=2019, thisMonth="10")   # 데이터가 온전한 해로 점검
     print("목록 resultCode/Msg:", header(root))
     rows = items(root)
     print("목록 건수:", len(rows), "| 필드:", list(rows[0].keys()) if rows else [])
@@ -155,7 +161,7 @@ def probe(key: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--probe", action="store_true")
-    ap.add_argument("--since", type=int, default=2014)
+    ap.add_argument("--years", help="수집 연도 (예: 2016-2019 또는 2016,2018). 기본 2015-2023")
     a = ap.parse_args()
     env = load_env()
     global BASE
@@ -168,22 +174,28 @@ def main() -> int:
         probe(key)
         return 0
 
-    print(f"[{datetime.now():%F %T}] 농사로 이달의 식재료 수집 시작 ({a.since}년~)")
+    years = DEFAULT_YEARS
+    if a.years:
+        if "-" in a.years:
+            lo, hi = map(int, a.years.split("-"))
+            years = list(range(lo, hi + 1))
+        else:
+            years = [int(y) for y in a.years.split(",")]
+    print(f"[{datetime.now():%F %T}] 농사로 이달의 식재료 수집 시작 ({years[0]}~{years[-1]}년)")
     listing: dict[str, dict] = {}
-    today = date.today()
-    for y in range(a.since, today.year + 1):
+    names: set[str] = set()
+    for y in years:
         for m in range(1, 13):
-            if (y, m) > (today.year, today.month):
-                break
             try:
                 root = call("monthFdmtLst", key, thisYear=y, thisMonth=f"{m:02d}")
             except Exception as e:  # noqa: BLE001
                 print(f"  ! {y}-{m:02d} 목록 실패: {e}")
                 continue
             for row in items(root):
-                no = row.get("cntntsNo")
-                if no and no not in listing:
+                no, nm = row.get("cntntsNo"), (row.get("fdmtNm") or "").strip()
+                if no and no not in listing and nm not in names:   # 같은 식재료가 해마다 반복 → 이름으로도 중복 제거
                     listing[no] = {**row, "_month": m}
+                    names.add(nm)
             time.sleep(0.1)
     print(f"  식재료 목록: {len(listing)}건")
 
@@ -195,15 +207,16 @@ def main() -> int:
             failed += 1
             print(f"  ! 상세 실패 {no}: {e}")
             continue
-        fields = {**row, **(drows[0] if drows else {})}
+        fields = {k: v for k, v in {**row, **(drows[0] if drows else {})}.items() if not k.startswith("_")}
         sec = parse_detail(fields)
         name = clean_text(_name_of(fields))
-        if not name or "storage" not in sec and "prep" not in sec:
+        if not name or not ({"storage", "prep", "eat"} & sec.keys()):
             continue
         guides.append({
             "id": f"nongsaro-{no}", "name": name, "aliases": aliases(name),
             "month": row.get("_month"),
             "purchase": sec.get("purchase", []), "storage": sec.get("storage", []), "prep": sec.get("prep", []),
+            "eat": sec.get("eat", []),
             "source_name": SOURCE_NAME, "source_url": DETAIL_PAGE.format(no),
         })
         time.sleep(0.05)

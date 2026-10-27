@@ -57,7 +57,7 @@ def _hit(name: str, tok: str) -> bool:
 
 
 def find(text: str) -> tuple[dict, str] | None:
-    """질문 문장에서 식재료를 찾아 (안내, 질문 속 단어)를 돌려준다. 가장 길게 일치하는 이름 우선."""
+    """질문 문장에서 식재료를 찾아 (안내, 질문 속 단어)를 돌려준다."""
     best = None
     toks = tokens(text)
     for g in _load():
@@ -67,7 +67,9 @@ def find(text: str) -> tuple[dict, str] | None:
                 continue
             for tok in toks:
                 if _hit(name, tok):
-                    score = (len(name), tok == name)
+                    # 정확히 같은 이름 > 질문 단어에 포함된 이름(긴 것 우선) > 이름에 포함된 질문 단어(짧은 것 우선)
+                    rank = 2 if tok == name else 1 if name in tok else 0
+                    score = (rank, len(name) if rank else -len(name))
                     if best is None or score > best[0]:
                         best = (score, g, tok)
     return (best[1], best[2]) if best else None

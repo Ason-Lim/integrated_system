@@ -4,9 +4,10 @@
 출처
   1) 식품안전나라 조리식품 레시피 DB (COOKRCP01) — 재료·조리순서·사진·영양
   2) 농식품정보누리 레시피 (기본정보 / 재료정보 / 과정정보 Grid)
+  3) 농촌진흥청 농사로 향토음식(nvpcFdCkry) · 종가음식(headFamilyFood)  — NONGSARO_API_KEY 필요
 
 출력: var/recipes/recipes.json   (서버는 이 파일만 읽는다. API 호출은 이 스크립트에서만)
-실행: venv/bin/python scripts/update_recipes.py [--limit N] [--only fs|epis]
+실행: venv/bin/python scripts/update_recipes.py [--limit N] [--only fs|epis|local|head]
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import argparse, json, os, re, sys, tempfile, time, urllib.parse, urllib.request
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/nongsaro_api.py
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = Path(os.environ.get("RECIPE_CATALOG_PATH", ROOT / "var" / "recipes" / "recipes.json"))
@@ -64,7 +67,7 @@ def _rows(data: dict) -> tuple[list[dict], int | None]:
 
 # ── 재료 문자열 파싱 ───────────────────────────────────────────
 _SECTION = re.compile(r"^\s*[\[●•■◆○◎·\-]*\s*([^:：\]]{1,12})\s*[\]:：]\s*")
-_AMOUNT = re.compile(r"^(?P<name>[^\d½⅓¼¾(（]+?)\s*(?P<amount>[\d½⅓¼¾].*|\(.*|약.*|조금.*|적당.*|약간.*)?$")
+_AMOUNT = re.compile(r"^(?P<name>[^\d½⅓¼¾(（]+?)\s*(?P<amount>[\d½⅓¼¾].*|\(.*|약.*|조금.*|적당.*|적량.*|약간.*|소량.*)?$")
 
 
 def _split_top(s: str) -> list[str]:
@@ -244,15 +247,103 @@ def collect_epis(env: dict, limit: int | None) -> list[dict]:
     return out
 
 
+# ── 농사로 향토음식 / 종가음식 ─────────────────────────────────
+_STEP_NO = re.compile(r"^\s*(?:\d{1,2}\s*[.)]|[①-⑳]|\(\d{1,2}\))\s*")
+_STEP_HEAD = re.compile(r"(조리\s*(?:법|방법)|만드는\s*(?:법|방법)|만들기)\s*[:：]?\s*$")
+
+
+def split_story(raw: str) -> tuple[str, list[str]]:
+    """'유래 및 조리법' 본문 → (유래 요약, 조리 단계). 번호 줄 또는 '조리법' 머리말 뒤를 단계로 본다."""
+    from nongsaro_api import text as ns_text
+    lines = [l.strip() for l in ns_text(raw).split("\n") if l.strip()]
+    head = next((i for i, l in enumerate(lines) if _STEP_HEAD.search(l)), None)
+    if head is not None:
+        story, steps = lines[:head], lines[head + 1:]
+    else:
+        story = [l for l in lines if not _STEP_NO.match(l)]
+        steps = [l for l in lines if _STEP_NO.match(l)]
+    steps = [clean_step(_STEP_NO.sub("", l)) for l in steps]
+    return " ".join(story)[:400], [t for t in steps if t]
+
+
+def collect_nongsaro_local(env: dict, limit: int | None) -> list[dict]:
+    import nongsaro_api as ns
+    key = env.get("NONGSARO_API_KEY") or ns.api_key()
+    if not key:
+        print("  ! NONGSARO_API_KEY 없음 — 향토음식 건너뜀")
+        return []
+    out = []
+    for row in ns.paged("nvpcFdCkry", "fdNmLst", key):
+        if limit and len(out) >= limit:
+            break
+        no = row.get("cntntsNo")
+        d = {**row, **ns.first(ns.call("nvpcFdCkry", "fdNmDtl", key, cntntsNo=no))}
+        name = ns.text(d.get("trditfdNm"))
+        if not name:
+            continue
+        ing_raw = ", ".join(x for x in [ns.text(d.get("fdmtInfo")), ns.text(d.get("asstnMatrlInfo"))] if x)
+        steps = [clean_step(_STEP_NO.sub("", l)) for l in ns.text(d.get("stdCkryDtl")).split("\n") if l.strip()]
+        tips = " ".join(x for x in [ns.text(d.get("ckngDmprDtl")), ns.text(d.get("referMatterDtl"))] if x)
+        out.append({
+            "id": f"nvpc-{no}", "source": "nongsaro_local", "source_name": "농촌진흥청 농사로 향토음식",
+            "name": name, "summary": ns.text(d.get("originDtl"))[:400],
+            "category": ns.text(d.get("foodTyCodeFullname")).replace(">", "·"),
+            "method": ns.text(d.get("ckryCodeFullname")).replace(">", "·"),
+            "region": ns.text(d.get("atptCodeNm")) or None,
+            "servings": None, "time": None, "kcal": None, "tags": ["향토음식"],
+            "tip": tips[:300] or None, "image": ns.image_url(d),
+            "ingredients_raw": ing_raw, "ingredients": parse_ingredients(ing_raw.replace("\n", ", "), name),
+            "steps": [{"text": t, "image": None} for t in steps if t],
+        })
+        time.sleep(0.05)
+    print(f"  농사로 향토음식: {len(out)}건")
+    return out
+
+
+def collect_nongsaro_head(env: dict, limit: int | None) -> list[dict]:
+    import nongsaro_api as ns
+    key = env.get("NONGSARO_API_KEY") or ns.api_key()
+    if not key:
+        print("  ! NONGSARO_API_KEY 없음 — 종가음식 건너뜀")
+        return []
+    out = []
+    for row in ns.paged("headFamilyFood", "headFamilyFoodLst", key):
+        if limit and len(out) >= limit:
+            break
+        no = row.get("cntntsNo")
+        d = {**row, **ns.first(ns.call("headFamilyFood", "headFamilyFoodDtl", key, cntntsNo=no))}
+        name = ns.text(d.get("clsrcFdNm"))
+        if not name:
+            continue
+        story, steps = split_story(d.get("fdStoryDtl") or "")
+        ing_raw = ns.text(d.get("clsrcFdMatrlDtl"))
+        region = " ".join(x for x in [ns.text(d.get("atptCodeNm")), ns.text(d.get("signguCodeNm"))] if x)
+        house = ns.text(d.get("clsrcNm"))
+        out.append({
+            "id": f"clsrc-{no}", "source": "nongsaro_head", "source_name": "농촌진흥청 농사로 종가음식",
+            "name": name, "summary": story,
+            "category": " · ".join(x for x in [ns.text(d.get("clsrcFdClCodeLclasNm")), ns.text(d.get("clsrcFdClCodeSclasNm"))] if x),
+            "method": "", "region": region or None, "house": house or None,
+            "literature": ns.text(d.get("ltrtreNm")) or None,
+            "servings": None, "time": None, "kcal": None, "tags": ["종가음식"] + ([house] if house else []),
+            "image": ns.image_url(d),
+            "ingredients_raw": ing_raw, "ingredients": parse_ingredients(ing_raw.replace("\n", ", "), name),
+            "steps": [{"text": t, "image": None} for t in steps],
+        })
+        time.sleep(0.05)
+    print(f"  농사로 종가음식: {len(out)}건")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, help="출처별 최대 건수 (시험용)")
-    ap.add_argument("--only", choices=["fs", "epis"])
+    ap.add_argument("--only", choices=list(SOURCES))
     a = ap.parse_args()
     env = load_env()
     print(f"[{datetime.now():%F %T}] 레시피 수집 시작")
     recipes, counts, errors = [], {}, {}
-    for code, fn in (("fs", collect_foodsafety), ("epis", collect_epis)):
+    for code, (fn, _src) in SOURCES.items():
         if a.only and a.only != code:
             continue
         try:
@@ -266,10 +357,12 @@ def main() -> int:
         print("수집된 레시피가 없어 기존 파일을 유지합니다.")
         return 1
     # 이전 파일에서 실패한 출처는 유지 (한쪽 API 장애로 데이터가 줄지 않게)
-    if errors and OUT.exists():
+    if (errors or a.only) and OUT.exists():
         try:
             prev = json.loads(OUT.read_text(encoding="utf-8")).get("recipes", [])
-            keep = [r for r in prev if r.get("source") in {"foodsafety" if c == "fs" else "epis" for c in errors}]
+            # 실패했거나 이번에 수집하지 않은(--only) 출처는 이전 데이터를 그대로 둔다
+            fresh = {SOURCES[c][1] for c in counts}
+            keep = [r for r in prev if r.get("source") not in fresh]
             recipes += keep
             print(f"  실패한 출처는 이전 데이터 {len(keep)}건 유지")
         except Exception:  # noqa: BLE001
@@ -284,6 +377,14 @@ def main() -> int:
     os.replace(tmp, OUT)
     print(f"[{datetime.now():%F %T}] 저장: {OUT} (총 {len(recipes)}건, 조리순서 있음 {with_steps}건)")
     return 0
+
+
+SOURCES = {  # 코드: (수집 함수, 저장 source 값)
+    "fs": (collect_foodsafety, "foodsafety"),
+    "epis": (collect_epis, "epis"),
+    "local": (collect_nongsaro_local, "nongsaro_local"),
+    "head": (collect_nongsaro_head, "nongsaro_head"),
+}
 
 
 if __name__ == "__main__":

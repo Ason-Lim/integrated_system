@@ -29,6 +29,9 @@ def catalog(tmp_path, monkeypatch):
         _r("fs-12", "토마토 크림 파스타", "스파게티면 100g, 토마토 1개, 생크림 50ml"),
         _r("fs-37", "두부된장국", "된장국\n두부 20g(2×2×2cm), 감자 10g(4×3×1cm), 된장 10g", category="국&찌개"),
         _r("fs-90", "감자조림", "감자 200g, 간장 2큰술, 물엿 1큰술", category="반찬", method="조리기"),
+        {**_r("clsrc-7", "건진국수", "밀가루 200g, 콩가루 20g, 애호박 50g", category="면류"),
+         "source": "nongsaro_head", "source_name": "농촌진흥청 농사로 종가음식",
+         "region": "경상북도 안동시", "house": "학봉종가", "literature": "수운잡방", "tags": ["종가음식", "학봉종가"]},
     ]}
     p = tmp_path / "recipes.json"
     p.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
@@ -91,3 +94,37 @@ def test_normalize_group_labels_in_ingredient_names():
 
 def test_clean_step_joins_source_line_breaks():
     assert update_recipes.clean_step("1. 단호박은 잘라 씨를 제거하고\n찜통에서 찐다.a") == "단호박은 잘라 씨를 제거하고 찜통에서 찐다."
+
+
+def test_search_by_region_and_head_family(catalog):
+    assert recipe_catalog.search("안동 종가 음식")[0]["name"] == "건진국수"
+    assert recipe_catalog.search("학봉종가 레시피")[0]["name"] == "건진국수"
+
+
+def test_head_family_detail_shows_region_and_literature(catalog):
+    d = DialogueManager(persist=False).handle(None, message="건진국수 레시피 보기")
+    md = d["blocks"][0]["data"]["md"]
+    assert "경상북도 안동시 · 학봉종가" in md and "문헌: 수운잡방" in md
+
+
+def test_split_story_separates_origin_and_steps():
+    story, steps = update_recipes.split_story("안동 종가에서 전해 온다.<br>조리법<br>1. 반죽한다.<br>2. 삶는다.")
+    assert story == "안동 종가에서 전해 온다." and steps == ["반죽한다.", "삶는다."]
+
+
+def test_variety_name_falls_back_to_base_ingredient(tmp_path, monkeypatch):
+    import json as _j
+    rs = [_r("a", "감식초", "감 1kg"), {**_r("b", "감식초 [방법1]", "감 2kg"), "region": "전북"},
+          _r("c", "홍시 셔벗", "감 2개, 설탕 1큰술"), _r("d", "감자전", "감자 2개")]
+    p = tmp_path / "r.json"; p.write_text(_j.dumps({"recipes": rs}, ensure_ascii=False), encoding="utf-8")
+    g = tmp_path / "g.json"; g.write_text(_j.dumps({"guides": [{"name": "감", "aliases": [], "storage": ["x"]}]},
+                                                   ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("RECIPE_CATALOG_PATH", str(p)); monkeypatch.setenv("STORAGE_GUIDE_PATH", str(g))
+    md = DialogueManager(persist=False).handle(None, message="대봉감 레시피 알려줘")["blocks"][0]["data"]["md"]
+    assert "**감식초**" in md and "홍시 셔벗" in md
+    assert "방법1" not in md and "감자전" not in md            # 같은 요리 중복·'감자' 오인 없음
+
+
+def test_recipe_not_found_says_so(catalog):
+    md = DialogueManager(persist=False).handle(None, message="과메기 레시피 알려줘")["blocks"][0]["data"]["md"]
+    assert "찾지 못했어요" in md
