@@ -1,0 +1,26 @@
+[
+  {
+    "category": "선물용",
+    "icon": "Gift",
+    "keyword": "결혼답례품",
+    "question": "결혼 답례품으로 실용적인 먹거리 세트 1만 원대로 추천해 줘"
+  },
+  {
+    "category": "간식/디저트",
+    "icon": "Cookie",
+    "keyword": "찹쌀떡",
+    "question": "택배로 받아도 굳지 않는 찹쌀떡 맛집 추천해 줘"
+  },
+  {
+    "category": "제철요리",
+    "icon": "Utensils",
+    "keyword": "과메기",
+    "question": "과메기 처음 사보는데 비린내 없이 먹는 법이랑 같이 살 거 알려줘"
+  },
+  {
+    "category": "제철과일",
+    "icon": "Leaf",
+    "keyword": "감홍사과",
+    "question": "감홍사과 처음 사보는데 문경 거랑 다른 산지랑 뭐가 달라?"
+  }
+]

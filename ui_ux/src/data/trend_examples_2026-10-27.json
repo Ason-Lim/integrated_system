@@ -1,0 +1,26 @@
+[
+  {
+    "category": "선물용",
+    "icon": "Gift",
+    "keyword": "빼빼로",
+    "question": "빼빼로데이에 회사 동료 20명한테 돌릴 과자 선물 추천해 줘"
+  },
+  {
+    "category": "간식/디저트",
+    "icon": "Cookie",
+    "keyword": "찹쌀떡",
+    "question": "택배로 받아도 굳지 않는 찹쌀떡 맛집 추천해 줘"
+  },
+  {
+    "category": "제철요리",
+    "icon": "Utensils",
+    "keyword": "과메기",
+    "question": "과메기 처음 사보는데 비린내 없이 먹는 법이랑 같이 살 거 알려줘"
+  },
+  {
+    "category": "제철과일",
+    "icon": "Leaf",
+    "keyword": "대봉감",
+    "question": "대봉감 홍시 만들려면 며칠 두고 어떻게 보관해?"
+  }
+]

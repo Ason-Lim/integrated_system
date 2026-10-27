@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ArrowRight, Plus, Sparkles, ShoppingBag, Utensils, SlidersHorizontal, Square, Gift, Cookie, Leaf } from 'lucide-react';
+import { ArrowUp, ArrowRight, Plus, Sparkles, ShoppingBag, Utensils, Square, Gift, Cookie, Leaf, type LucideIcon } from 'lucide-react';
 import { BlockRenderer } from './components/BlockRenderer';
 import { ProductDetail } from './components/ProductDetail';
 import { FlowStepper } from './components/FlowStepper';
@@ -9,12 +9,51 @@ import type { Message } from './types';
 import type { Candidate } from './types/blocks';
 import { sendChat } from './api/client';
 
-const examples = [
+// ── 홈 화면 예시 질문: src/data/trend_examples_YYYY-MM-DD.json 중 최신 파일을 읽는다 ──
+// 파일은 scripts/update_trend_examples.py가 매일 만든다. (dev 서버는 새 파일이 생기면 자동 반영, 배포는 다시 빌드)
+type TrendExample = { category: string; icon?: string; keyword?: string; question: string };
+type Example = { icon: LucideIcon; label: string; text: string; note: string };
+
+const ICONS: Record<string, LucideIcon> = { Gift, Cookie, Utensils, Leaf, ShoppingBag };
+
+const FALLBACK_EXAMPLES: Example[] = [
     { icon: Gift, label: '선물용', text: '부모님 선물로 좋은 식품 추천해줘', note: '받는 분 취향까지 고려해서' },
     { icon: Cookie, label: '간식/디저트', text: '두바이 쫀득쿠키 추천해줘', note: '가격부터 배송까지 한 번에' },
     { icon: Utensils, label: '레시피/요리', text: '파스타 레시피로 장보기', note: '있는 재료는 빼고, 필요한 만큼' },
     { icon: Leaf, label: '캠핑', text: '캠핑 갈 때 챙길 먹거리 추천해줘', note: '보관·조리 편의까지 함께' }
 ];
+
+const trendFiles = import.meta.glob<TrendExample[]>('./data/trend_examples_*.json', { eager: true, import: 'default' });
+
+// 정상 파일: 질문이 3개 이상이고 키워드가 서로 겹치지 않는 파일 (같은 키워드만 반복된 파일은 건너뜀)
+function isUsable(rows: unknown): rows is TrendExample[] {
+    if (!Array.isArray(rows) || rows.length < 3) return false;
+    const ok = rows.filter(r => r && typeof r.question === 'string' && r.question.trim() && typeof r.category === 'string');
+    const keys = new Set(ok.map(r => (r.keyword || r.question).trim()));
+    return ok.length >= 3 && keys.size === ok.length;
+}
+
+function loadExamples(): { examples: Example[]; date: string | null } {
+    const paths = Object.keys(trendFiles).sort().reverse(); // 파일명 날짜 기준 최신순
+    for (const path of paths) {
+        const rows = trendFiles[path];
+        if (!isUsable(rows)) continue;
+        const date = path.match(/(\d{4})-(\d{2})-(\d{2})/);
+        const mmdd = date ? `${Number(date[2])}/${Number(date[3])}` : '';
+        return {
+            date: date ? date[0] : null,
+            examples: rows.slice(0, 4).map(r => ({
+                icon: ICONS[r.icon ?? ''] ?? ShoppingBag,
+                label: r.category,
+                text: r.question.trim(),
+                note: r.keyword ? `${mmdd} 급상승 키워드 · ${r.keyword}` : `${mmdd} 트렌드`,
+            })),
+        };
+    }
+    return { examples: FALLBACK_EXAMPLES, date: null };
+}
+
+const { examples, date: examplesDate } = loadExamples();
 
 export default function ChatWindow() {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -125,7 +164,7 @@ export default function ChatWindow() {
                         <div className="mt-9 grid gap-3 grid-cols-1 sm:grid-cols-2">
                             {examples.map(({ icon: Icon, ...item }) => {
                                 return (
-                                    <button key={item.text} onClick={() => submit(item.text)} className="group flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-sm">
+                                    <button key={item.text} type="button" disabled={busy} onClick={() => submit(item.text)} className="group flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-sm">
                                         <div>
                                             <div className="mb-4 flex items-center gap-2">
                                                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-accent">
@@ -147,6 +186,7 @@ export default function ChatWindow() {
                                 );
                             })}
                         </div>
+                        {examplesDate && <p className="mt-3 text-right text-[11px] text-stone-400">예시 질문 기준일 {examplesDate} · 네이버 식품 키워드 순위</p>}
                         <p className="mt-7 text-center text-xs text-stone-400">조건 확인 → 후보 비교 → 근거 확인 → 판매처 연결</p>
                     </section>
                 ) : (
