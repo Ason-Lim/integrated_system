@@ -12,3 +12,4 @@ var/blog_drafts/
 _backup_before_restore_*/
 data/foodpolis_raw/
 var/*.log
+data/foodpolis_enriched/

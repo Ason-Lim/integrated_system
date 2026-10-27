@@ -11,3 +11,7 @@ source venv/bin/activate
 echo "=== [$(date)] Foodpolis 크롤링 시작 ===" >> /Users/mom/integrated_system/var/foodpolis_scrape.log
 python scrape_foodpolis_full.py >> /Users/mom/integrated_system/var/foodpolis_scrape.log 2>&1
 echo "=== [$(date)] 크롤링 종료 (종료 코드: $?) ===" >> /Users/mom/integrated_system/var/foodpolis_scrape.log
+
+# 순위 제품에 식약처 품목제조보고(원재료) 붙이기 — 내부 참고 자료 (data/foodpolis_enriched)
+python scripts/enrich_foodpolis.py >> /Users/mom/integrated_system/var/foodpolis_scrape.log 2>&1
+echo "=== [$(date)] 보강 종료 (종료 코드: $?) ===" >> /Users/mom/integrated_system/var/foodpolis_scrape.log
