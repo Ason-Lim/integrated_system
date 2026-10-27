@@ -9,6 +9,7 @@ UNDERSTAND ──(상품 모름)──▶ CLARIFY ──▶ RECOMMEND ──▶ 
 """
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -19,6 +20,7 @@ from shared.nlu.service import NLUService
 from shared import store
 from shared.decision_ledger import LedgerEntry, invalidated, open_entry
 from shared import persona
+from shared import recipe_catalog
 from consumer import presenter
 
 
@@ -141,6 +143,20 @@ class DialogueManager:
         if intent.action == "recipe":
             s.stage = Stage.CLARIFY
             s.last_items = []
+            raw = (message or chip or "").strip()
+            # "OO 레시피 보기" 칩 → 레시피 원문(재료·조리순서) + 재료 장보기 칩
+            picked = re.match(r"^(.+?)\s*레시피\s*보기$", raw)
+            recipe = recipe_catalog.find(picked.group(1)) if picked else None
+            if recipe:
+                s.recipe_title = recipe["name"]
+                s.recipe_ingredients = list(recipe.get("ingredients") or [])
+                s.recipe_mode = True
+                return self._reply(s, presenter.recipe_detail_blocks(recipe), intent=intent)
+            # 공공 레시피 DB(로컬 카탈로그)에서 요리 이름·재료로 후보 제안
+            query = intent.slots.get("product") or raw
+            found = recipe_catalog.search(query, limit=3)
+            if found:
+                return self._reply(s, presenter.recipe_list_blocks(recipe_catalog.terms(query), found), intent=intent)
             return self._reply(s, [presenter.text_block("원문 레시피와 보유 재료를 확인하겠습니다. 요리 이름·인분 수·레시피 원문 또는 출처를 알려주세요. 재료는 필수/선택으로 구분하고 단위와 조리 상태를 확인한 뒤 부족분만 계산합니다." )], intent=intent)
 
         if not intent.slots.get("product"):

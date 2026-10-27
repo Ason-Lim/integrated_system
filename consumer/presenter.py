@@ -360,3 +360,66 @@ def _form(s: dict, items: list[ScoredOffer], force_budget: bool = False,
             {"label": "가격", "value": "price"}, {"label": "품질", "value": "quality"},
             {"label": "후기·신뢰", "value": "trust"}]})
     return {"questions": qs[:2], "submit": "이 조건으로 다시 추천받기"}
+
+
+# ── 레시피 (공공 레시피 DB 원문) ─────────────────────────────────
+# 장보기 칩에서 뺄 기본 양념·물 (대부분 집에 있어 상품 검색 가치가 낮다)
+PANTRY = {"물", "소금", "설탕", "후추", "후춧가루", "식용유", "참기름", "들기름", "간장", "진간장", "국간장",
+          "다진마늘", "마늘", "올리브유", "식초", "참깨", "깨소금", "통깨", "맛술", "물엿", "올리고당", "고춧가루"}
+
+
+def _pantry(name: str) -> bool:
+    return name.replace(" ", "") in PANTRY
+
+
+def _recipe_facts(r: dict) -> str:
+    bits = [r.get("category"), r.get("method"), r.get("time"), r.get("servings"), r.get("level")]
+    kcal = r.get("kcal")
+    if kcal:
+        bits.append(kcal if "cal" in str(kcal).lower() else f"{kcal}kcal")
+    return " · ".join(str(b) for b in bits if b)
+
+
+def recipe_list_blocks(query_terms: list[str], recipes: list[dict]) -> list[Block]:
+    head = " ".join(query_terms) or "요청하신 요리"
+    lines = [f"**{head}** 레시피를 공공 레시피 DB에서 {len(recipes)}개 찾았어요. 보고 싶은 레시피를 골라 주세요."]
+    for r in recipes:
+        main = [i["name"] for i in r.get("ingredients", []) if not _pantry(i["name"])][:4]
+        desc = " · ".join(x for x in [_recipe_facts(r), f"재료 {len(r.get('ingredients', []))}가지" if r.get("ingredients") else ""] if x)
+        lines.append(f"- **{r['name']}** — {desc}" if desc else f"- **{r['name']}**")
+        if main:
+            lines.append(f"  - 주재료: {', '.join(main)}")
+    return [
+        text_block("\n".join(lines)),
+        Block(type="chips", data={"mode": "message",
+                                  "items": [{"label": r["name"], "value": f"{r['name']} 레시피 보기"} for r in recipes]}),
+    ]
+
+
+def recipe_detail_blocks(r: dict) -> list[Block]:
+    md = [f"**{r['name']}**"]
+    facts = _recipe_facts(r)
+    if facts:
+        md.append(facts)
+    if r.get("summary"):
+        md.append(r["summary"][:200])
+    ings = r.get("ingredients") or []
+    md.append("")
+    md.append("**재료**")
+    if ings:
+        md += [f"- {i['name']} {i.get('amount') or ''}".rstrip() for i in ings]
+    elif r.get("ingredients_raw"):
+        md.append(r["ingredients_raw"])
+    if r.get("steps"):
+        md.append("")
+        md.append("**만드는 법**")
+        md += [f"- {n}) {st['text']}" for n, st in enumerate(r["steps"], 1)]
+    md.append("")
+    md.append(f"출처: {r.get('source_name') or '공공 레시피 DB'} (원문 그대로 옮겼어요. 분량은 출처 기준 인분입니다)")
+    shop = [i["name"] for i in ings if not _pantry(i["name"])][:5]
+    blocks = [text_block("\n".join(md))]
+    if shop:
+        blocks.append(text_block("필요한 재료를 바로 찾아볼까요? 집에 있는 재료는 빼고 골라 주세요."))
+        blocks.append(Block(type="chips", data={"mode": "message",
+                                                "items": [{"label": f"{n} 사러 가기", "value": f"{n} 추천해줘"} for n in shop]}))
+    return blocks
