@@ -2,6 +2,7 @@
 
 commerce_ai/intent_analyzer.py(예산·대상·상황·우선순위)와 food-nlu 시스템 프롬프트의
 ACTION 우선순위 규칙(몰 → 알레르기 → 최저가 → 레시피 → 영양 → 선물 → 일반)을 코드로 옮겼다.
+그 앞에 정보·비교 질문(compare_info: "뭐가 달라?", "차이가 뭐야?")을 추가했다.
 슬롯 키는 food-nlu slot_definition 과 동일하게 맞췄다 (mall, product, category, purpose, recipient,
 quantity, allergen, taste, diet_goal) + budget_min/budget_max/priority/occasion.
 """
@@ -42,7 +43,16 @@ STOPWORDS = {
     "먹을", "만한", "오늘", "이번", "진짜", "너무", "제일", "잘", "아무거나", "골라줘", "꼽아줘",
     "최저가", "가성비", "좋은", "맛있는", "저렴한", "싼", "선물", "선물용", "에서", "살", "수", "있는",
     "이하", "이상", "선물", "생신", "세트", "정도", "사고", "싶어", "중에", "용", "뭐", "어떤", "괜찮은", "할만한",
+    # 정보·비교 질문에 붙는 말 — 검색어로 보내면 무관한 상품이 섞인다 (예: "감홍사과 처음 문경 거랑")
+    "처음", "사보는데", "뭐가", "뭐야", "달라", "다른", "다르", "차이", "차이가", "차이점", "비교", "비교해줘",
+    "어때", "어떻게", "궁금", "궁금해", "나아", "나은", "낫나", "어디", "산지", "지역", "품종", "종류",
 }
+# 정보·비교 질문 신호. "다른 사과 추천해줘"처럼 '다른' 단독은 비교가 아니므로 제외한다.
+COMPARE_CUES = re.compile(
+    r"(뭐가|무엇이|어디가|어떻게|어떤\s*게|어느\s*게)\s*(더\s*)?(달라|다른|다르|틀려|나아|낫|좋아)"
+    r"|차이|다른\s*점|다른지|비교하면|\bvs\b|VS"
+)
+COMPARE_AXIS = {"origin": ["산지", "지역", "어디", "원산지"], "variety": ["품종", "종류"]}
 VERBISH = re.compile(r"(는데|인데|워|해서|하고|려고|니까|으면|던|할|갈|먹을|먹기|싶은|드릴|줄)$")
 NUM_KR = {"한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5, "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9, "열": 10}
 
@@ -126,12 +136,13 @@ def product_terms(text: str) -> str:
     for tok in cleaned.split():
         if VERBISH.search(tok):
             continue
-        base = re.sub(r"(에서|으로|에게|한테|을|를|은|는|용|께|에)$", "", tok)
+        base = re.sub(r"(이랑|랑|에서|으로|에게|한테|을|를|은|는|용|께|에)$", "", tok)
         if len(base) >= 3:
             base = re.sub(r"로$", "", base)
         if len(base) < 2 or base in STOPWORDS or tok in STOPWORDS or base in all_kw:
             continue
-        words.append(base)
+        if base not in words:  # "청송 사과랑 문경 사과" → 사과 중복 제거
+            words.append(base)
     return " ".join(words[:4])
 
 
@@ -182,8 +193,18 @@ def parse(text: str) -> Intent:
         slots["_expansion"] = exp
         log_unsupported(text, exp, source="rule_nlu")
 
-    # ACTION — food-nlu 시스템 프롬프트의 우선순위 그대로
-    if mall:
+    compare = bool(COMPARE_CUES.search(text))
+    if compare:
+        slots["question"] = "compare"
+        axis = _first(COMPARE_AXIS, text)
+        if axis:
+            slots["compare_axis"] = axis
+
+    # ACTION — 정보·비교 질문을 가장 먼저 본다 (구매 요청이 아니므로 예산을 묻지 않는다).
+    # 그 다음은 food-nlu 시스템 프롬프트의 우선순위 그대로 (몰 → 알레르기 → 최저가 → 레시피 → 영양 → 선물 → 일반)
+    if compare:
+        action = "compare_info"
+    elif mall:
         action = "recommend_in_mall"
     elif allergen:
         action = "allergy"

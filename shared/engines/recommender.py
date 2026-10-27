@@ -33,6 +33,7 @@ class Recommender:
         self.markets = markets or MarketRegistry(self.s)
         self.engine = engine or CommerceAIEngine(self.s)
         self.last_engine = self.mode
+        self.last_dropped_irrelevant = 0
 
     @property
     def mode(self) -> str:
@@ -52,7 +53,11 @@ class Recommender:
         if not ranked:
             malls = [intent.slots["mall"]] if intent.slots.get("mall") else None
             offers = self.markets.search(query, malls=malls, limit=30)
-            ranked = simple_ranker.rank(offers, intent, query)
+            # 마켓 검색은 일치 상품이 없어도 인기 상품을 돌려줄 수 있다 (예: 사과 검색에 섬유유연제).
+            # 상품어가 제목에 하나도 없는 후보는 랭킹 전에 제외하고, 0개면 '찾지 못함'으로 보낸다.
+            kept = relevant_offers(offers, intent)
+            self.last_dropped_irrelevant = len(offers) - len(kept)
+            ranked = simple_ranker.rank(kept, intent, query)
         # SAFE-QE: 검색 결과의 상품 근거(제목·스펙·설명)로 확장어를 재검증한다.
         # 근거에 없는 확장어는 요구로 승격하지 않고 로그로만 남긴다.
         if intent.slots.get("_expansion") and ranked:
@@ -89,6 +94,20 @@ class Recommender:
         for so in top:
             so.reason = so.reason or compose_reason(so)
         return query, top
+
+
+def relevant_offers(offers: list, intent: Intent) -> list:
+    """상품어(slots.product) 중 하나라도 제목에 있는 후보만 남긴다. 띄어쓰기 차이는 무시한다."""
+    terms = [t for t in str(intent.slots.get("product") or "").split() if len(t) >= 2]
+    if not terms:
+        return offers
+    out = []
+    for o in offers:
+        title = o.title or ""
+        flat = title.replace(" ", "")
+        if any(t in title or t in flat for t in terms):
+            out.append(o)
+    return out
 
 
 def apply_budget(items: list[ScoredOffer], intent: Intent) -> list[ScoredOffer]:

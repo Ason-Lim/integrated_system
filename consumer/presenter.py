@@ -246,6 +246,9 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
                           persona_unknown: list[str] | None = None) -> list[Block]:
     s = intent.slots
     product = s.get("product", "")
+    compare = intent.action == "compare_info"
+    if not items and compare:
+        return [text_block(f"**{product}** 관련 상품을 찾지 못했어요. 비교하고 싶은 품종이나 산지 이름을 알려주시겠어요?")]
     if not items:
         tips = []
         if s.get("budget_max") or s.get("budget_min"):
@@ -268,6 +271,10 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     all_sample = all(x.offer.is_sample for x in items)
     where = f"{mall}에서 살 수 있는 " if mall and not all_sample else ""
     head = f"{where}{' '.join(ctx) + ' ' if ctx else ''}**{product}** 중에는 이 {len(items)}가지를 추천해요."
+    if compare:
+        axis = {"origin": "산지", "variety": "품종"}.get(s.get("compare_axis") or "", "상품")
+        head = (f"**{product}** {axis} 비교 질문으로 이해했어요. 차이는 아래 후보의 상품 정보(제목·설명)로 "
+                "확인되는 범위에서만 보여드리고, 확인되지 않은 맛·당도 차이는 단정하지 않을게요.")
 
     cards = [card(x, i + 1, ledger=ledger) for i, x in enumerate(items)]
     rankable_items = [x for x in items if x.rankable]
@@ -327,7 +334,7 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
     if country_code and country_code.upper() != "KR":
         blocks.append(_shipping_options_block(items))
 
-    form = _form(s, items, persona_unknown=persona_unknown)
+    form = _form(s, items, persona_unknown=persona_unknown, skip_budget=compare)
     if form["questions"]:
         blocks.append(Block(type="clarify_form", data=form))
     blocks.append(Block(type="chips", data={"items": ["더 저렴한 것", "후기 많은 순", "프리미엄으로"], "mode": "chip"}))
@@ -335,9 +342,10 @@ def recommendation_blocks(intent: Intent, items: list[ScoredOffer], active_malls
 
 
 def _form(s: dict, items: list[ScoredOffer], force_budget: bool = False,
-          persona_unknown: list[str] | None = None) -> dict:
+          persona_unknown: list[str] | None = None, skip_budget: bool = False) -> dict:
     qs = []
-    if force_budget or not (s.get("budget_max") or s.get("budget_min")):
+    # 정보·비교 질문(compare_info)에는 예산을 묻지 않는다.
+    if not skip_budget and (force_budget or not (s.get("budget_max") or s.get("budget_min"))):
         qs.append({"id": "budget", "label": "예산은 어느 정도인가요?", "options": budget_buckets(items)})
     if s.get("purpose") == "gift" and not s.get("recipient"):
         qs.append({"id": "recipient", "label": "누구에게 드리나요?", "options": [
