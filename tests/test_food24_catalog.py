@@ -35,6 +35,7 @@ def db(tmp_path, monkeypatch):
     ])
     con.commit(); con.close()
     monkeypatch.setenv("FOOD24_DB_PATH", str(p))
+    monkeypatch.setenv("FOOD24_IN_SERVICE", "1")
     f24.match.cache_clear()
     yield p
     f24.match.cache_clear()
@@ -84,3 +85,10 @@ def test_recommender_excludes_products_with_allergen_in_raw(db):
     # 원재료가 일부만 공개되므로 '없음'을 근거로 내세우지 않는다
     assert not any("표기 없음" in e for e in ssal.evidence)
     assert "알레르기 성분·교차오염 원문 확인" in ssal.unverified
+
+
+
+def test_service_switch_off_by_default(db, monkeypatch):
+    monkeypatch.setenv("FOOD24_IN_SERVICE", "0")
+    f24.match.cache_clear()
+    assert not f24.available() and f24.match("오리온 초코파이") is None   # DB가 있어도 스위치가 꺼져 있으면 쓰지 않음

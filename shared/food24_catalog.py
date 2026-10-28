@@ -42,8 +42,15 @@ def _db() -> Path:
     return Path(os.environ.get("FOOD24_DB_PATH", DEFAULT_DB))
 
 
+def in_service() -> bool:
+    """수집한 품목제조보고를 서비스(알레르기 제외·상세 원재료)에 쓸지 — .env FOOD24_IN_SERVICE (기본 꺼짐).
+    DB 파일이 생겼다고 저절로 서비스 동작이 바뀌지 않게 한다 (2026-10-28)."""
+    import shared.config  # noqa: F401  (.env 로드)
+    return os.getenv("FOOD24_IN_SERVICE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def available() -> bool:
-    return _db().exists()
+    return in_service() and _db().exists()
 
 
 def norm(s: str) -> str:
