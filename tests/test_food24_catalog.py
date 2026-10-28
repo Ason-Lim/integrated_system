@@ -92,3 +92,50 @@ def test_service_switch_off_by_default(db, monkeypatch):
     monkeypatch.setenv("FOOD24_IN_SERVICE", "0")
     f24.match.cache_clear()
     assert not f24.available() and f24.match("오리온 초코파이") is None   # DB가 있어도 스위치가 꺼져 있으면 쓰지 않음
+
+
+# ── 매칭 정확성 (2026-10-28 점검에서 찾은 오연결 유형) ───────────────────────────
+@pytest.fixture()
+def db2(tmp_path, monkeypatch):
+    p = tmp_path / "g.sqlite"
+    con = sqlite3.connect(p)
+    con.executescript(upd.SCHEMA)
+    con.executemany("insert into product values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
+        _rec("11", "ff", "농업회사법인주식회사고려인삼", "고려인삼농축액골드", "인삼농축액"),
+        _rec("12", "ff", "고려인삼제조주식회사", "고려인삼농축액골드", "인삼농축액,정제수"),
+        _rec("21", "ff", "(주)알피바이오", "알피바이오 알티지 오메가3", "오메가-3"),
+        _rec("22", "ff", "(주)알피바이오", "알티지(rTG) 오메가3 브이(V)", "오메가-3,비타민D"),
+        _rec("31", "ff", "동서바이오팜(주)", "프로신프로폴리스", "프로폴리스추출물"),
+        _rec("32", "ff", "동서바이오팜(주) 안성공장", "프로신프로폴리스", "프로폴리스추출물,비타민E"),
+        _rec("41", "ff", "주)팜크로스", "울트라비타민D3 1000", "비타민D3"),
+        _rec("51", "ff", "(주)서흥", "밀크씨슬", "밀크씨슬추출물"),
+        _rec("52", "ff", "(주)서흥", "밀크씨슬+", "밀크씨슬추출물,비타민B1"),
+        _rec("61", "ff", "콜마비앤에이치(주)음성공장", "장건강 유산균", "프로바이오틱스"),
+    ])
+    con.commit(); con.close()
+    monkeypatch.setenv("FOOD24_DB_PATH", str(p))
+    monkeypatch.setenv("FOOD24_IN_SERVICE", "1")
+    f24.match.cache_clear()
+    yield p
+    f24.match.cache_clear()
+
+
+def test_company_inside_product_name_is_not_evidence(db2):
+    # '고려인삼' 이 제품명 안에 있어도 제조사 확인 근거가 아니다 → 상품명 앞의 '고려인삼제조' 로 확인
+    assert f24.match("고려인삼제조 고려인삼농축액골드 60정")["report_no"] == "12"
+
+
+def test_brand_prefix_does_not_swallow_longer_name(db2):
+    assert f24.match("알피바이오 알티지(rTG) 오메가3 브이(V) 60정")["report_no"] == "22"
+
+
+def test_factory_suffix_and_punctuation(db2):
+    assert f24.match("동서바이오팜안성공장 프로신프로폴리스 60정")["report_no"] == "32"   # 공장까지 같은 쪽
+    assert f24.match("팜크로스 울트라비타민D3 1000 60정")["company_matched"]           # '주)팜크로스'
+    assert f24.match("콜마비앤에이치 장건강 유산균 30포")["company_matched"]           # 공장 뗀 회사명
+    assert f24._company_keys("대상웰라이프(주) 천안2공장")[-1] == "대상웰라이프"
+    assert f24._company_keys("주식회사 노바렉스2공장") == ["노바렉스2공장", "노바렉스"]
+
+
+def test_same_maker_symbol_only_names_with_different_raw_are_not_decided(db2):
+    assert f24.match("서흥 밀크씨슬+ 60정") is None          # '+' 는 정규화에서 빠짐 → 원재료가 다른 두 신고

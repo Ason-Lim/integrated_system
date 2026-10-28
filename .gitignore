@@ -14,3 +14,6 @@ data/foodpolis_raw/
 var/*.log
 data/foodpolis_enriched/
 data/source/
+
+# 인증키가 평문으로 든 로컬 점검 파일 (2026-10-28)
+test_foodpolis.py

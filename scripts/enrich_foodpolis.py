@@ -30,7 +30,7 @@ LOCAL_DB = ROOT / "var" / "knowledge" / "c002_rawmtrl.sqlite"   # scripts/import
 HEALTH_DB = ROOT / "var" / "knowledge" / "i0030_health.sqlite"  # scripts/import_i0030.py 로 만든 전체 I0030 (건강기능식품)
 SERVICE = "C002"
 CACHE_DAYS = 30
-CACHE_VER = 2      # 찾는 방법이 바뀌면 올린다 — 옛 방법으로 '없음'이 난 캐시를 다시 찾게 한다
+CACHE_VER = 5      # 찾는 방법이 바뀌면 올린다 — 옛 방법으로 '없음'이 난 캐시를 다시 찾게 한다
 
 
 def env(name: str) -> str:
@@ -48,7 +48,7 @@ class ServiceError(RuntimeError):
 SERVICE_CODES = {"INFO-100", "INFO-110", "INFO-120", "INFO-300", "INFO-400", "ERROR-300", "ERROR-310", "ERROR-500"}
 
 
-def query_name(prod: str) -> tuple[str, str | None]:
+def query_name(prod: str, keep_numbers: bool = False) -> tuple[str, str | None]:
     """'오리온)단백질바미니' → ('단백질바미니', '오리온'), '포스트*단백질바' → ('포스트 단백질바', None)"""
     brand = None
     m = re.match(r"^\s*([^)/\s]{1,6})[)/]\s*(.+)$", prod or "")      # '정관장)홍삼원', '정관장/홍삼원'
@@ -56,9 +56,10 @@ def query_name(prod: str) -> tuple[str, str | None]:
         brand, prod = m.group(1), m.group(2)
     prod = re.sub(r"[*_]", " ", prod)
     prod = re.sub(r"\((?:\d+입|고소한맛|[^)]*맛)\)", "", prod)            # '(16입)', '(고소한맛)'
-    for _ in range(2):                                                    # 끝의 용량·포장 표기 (두 번까지)
-        prod = re.sub(r"\s*(\d+(?:\.\d+)?\s*(?:ml|m|l|g|kg|입|T|포|개|병|캔|팩|EA)?|케이스|박스|병|캔)$", "", prod,
-                      flags=re.I).strip()
+    # 끝의 용량·포장 표기 (두 번까지). keep_numbers 면 단위 없는 숫자는 남긴다 — '비타500' 은 제품명
+    unit = r"(?:ml|m|l|g|kg|입|T|포|개|병|캔|팩|EA)" + ("" if keep_numbers else "?")
+    for _ in range(2):
+        prod = re.sub(rf"\s*(\d+(?:\.\d+)?\s*{unit}|케이스|박스|병|캔|팻|페트|PET)$", "", prod, flags=re.I).strip()
     return prod, brand
 
 
@@ -69,7 +70,10 @@ SPELL = [("F", "에프"), ("ZERO", "제로"), ("Zero", "제로"), ("new", "뉴")
 # 순위표에서 제품명 앞에 붙여 쓰는 브랜드 → 품목제조보고의 제조·판매사 (브랜드를 떼고 찾을 때 제조사로 확인)
 BRAND_COMPANY = {"정관장": "한국인삼공사", "한삼인": "농협홍삼", "종근당": "종근당", "광동": "광동", "롯데": "롯데",
                  "동원": "동원", "오뚜기": "오뚜기", "농심": "농심", "오리온": "오리온", "빙그레": "빙그레",
-                 "해태": "해태", "크라운": "크라운", "남양": "남양", "매일": "매일", "풀무원": "풀무원", "CJ": "씨제이"}
+                 "해태": "해태", "크라운": "크라운", "남양": "남양", "매일": "매일", "풀무원": "풀무원", "CJ": "씨제이",
+                 "청정원": "대상", "동아": "동아", "동서": "동서", "보해": "보해", "삼양": "삼양"}
+BRAND_ABBR = {"해": "해태", "롯": "롯데"}   # 순위표의 한 글자 줄임 ('해)갈아만든배')
+PARTIAL_MIN = 4    # 이보다 짧은 이름은 앞부분만 같아도 다른 제품('몬스터' → '몬스터킹')이라 '유사'로 잇지 않는다
 
 
 def strip_brand(q: str) -> tuple[str, str | None]:
@@ -81,21 +85,23 @@ def strip_brand(q: str) -> tuple[str, str | None]:
     return q, None
 
 
-def variants(q: str) -> list[str]:
-    """검색 후보: 원래 이름 → 영문 약어를 한글로 → '+' 묶음은 첫 제품 → 끝에서 한 글자씩 줄이기(75%까지)"""
-    out = [q]
+def variants(q: str) -> list[tuple[str, bool]]:
+    """검색 후보 (이름, 정확 일치로 인정할지): 원래 이름 → 영문 약어를 한글로 → '+' 묶음은 첫 제품(유사만).
+    끝을 한 글자씩 줄여 찾던 방식은 뺐다 — '박카스에프'를 '박카스에'로 줄이면 '박카스에이'(다른 제품)가 잡힌다
+    (2026-10-28). 붙여 쓴 이름은 search_split 이 앞·뒤를 모두 확인하며 찾는다."""
+    out = [(q, True)]
     k = q
     for a, b in SPELL:
         k = re.sub(rf"(?<![A-Za-z]){a}(?![A-Za-z])", b, k)
-    out.append(k)
+    out.append((k, True))
     if "+" in q:
-        out.append(q.split("+")[0])
-    # 끝을 줄이는 건 원래 길이의 75%까지만 — 더 줄이면 맛·종류가 다른 제품이 잡힌다 ('테이크핏초코'→'딸기맛')
-    base = norm(out[-1])
-    floor = max(4, -(-len(base) * 3 // 4))
-    for n in range(len(base) - 1, floor - 1, -1):
-        out.append(base[:n])
-    return list(dict.fromkeys(x for x in out if x))
+        out.append((q.split("+")[0], False))
+    seen, res = set(), []
+    for v, ok in out:
+        if v and v not in seen:
+            seen.add(v)
+            res.append((v, ok))
+    return res
 
 
 def norm(s: str) -> str:
@@ -137,7 +143,7 @@ def search_local(name: str, n: int = 30, contains: bool = True) -> list[dict]:
     return out
 
 
-def search_split(name: str, n: int = 10) -> list[dict]:
+def search_split(name: str, n: int = 30) -> list[dict]:
     """붙여 쓴 이름을 앞·뒤로 나눠 찾기: '테이크핏초코' → 앞부분 '테이크핏%' 이면서 '초코' 포함.
     앞부분이 긴 쪽부터 시도하고 처음 찾은 것을 돌려준다 (결과는 '유사'로만 본다)."""
     import sqlite3
@@ -197,18 +203,95 @@ def best_split(product: str, rows: list[dict]) -> tuple[str, list[dict]]:
     """search_split 결과: 이름을 나눠 찾은 것이라 '유사'. 원래 이름 길이에 가까운 것을 앞으로."""
     p = norm(product)
     rows = sorted(rows, key=lambda r: abs(len(norm(g(r, "PRDLST_NM"))) - len(p)))
-    return ("partial", rows[:3]) if rows else ("none", [])
+    return ("partial", rows) if rows else ("none", [])
 
 
-def best(product: str, rows: list[dict]) -> tuple[str, list[dict]]:
-    """정확히 같은 이름 > 이름이 포함 > 없음. 같은 수준이면 최대 3건을 '후보'로 남긴다."""
+def check_brand(kind: str, picked: list[dict], company: str | None) -> tuple[str, list[dict]]:
+    """브랜드를 알면 제조사로 확인한다. 맞는 행이 하나도 없으면:
+    - 이름이 정확히 같음 → 'uncertain'(판단불가) — 위탁생산(OEM)일 수도, 같은 이름의 다른 제품일 수도 있다
+      예: '오리온)단백질바미니' → '단백질바 미니/(주)삼아인터내셔날'
+    - 이름이 비슷할 뿐 → 'none' — 예: '해태)알사탕' → '알사탕캔디/다산식품' 은 버린다."""
+    if not company or kind == "none":
+        return kind, picked
+    hit = [r for r in picked if company in g(r, "BSSH_NM")]
+    if hit:
+        return kind, hit + [r for r in picked if r not in hit]
+    return ("uncertain", picked) if kind == "exact" else ("none", [])
+
+
+def lookup_local(prod: str) -> tuple[str, list[dict], str]:
+    """로컬 C002·I0030 에서 순위 제품 하나를 찾는다 → (판정, 후보 최대 3건, 찾은 방법)."""
+    q, brand = query_name(prod)
+    qn = query_name(prod, keep_numbers=True)[0]
+    if brand and len(brand) < 2:          # '신)보해복분자' 의 '신'은 브랜드가 아니라 신제품 표시
+        brand = BRAND_ABBR.get(brand)
+    nb, b2 = strip_brand(q)
+    brand = brand or b2
+    company = BRAND_COMPANY.get(brand, brand) if brand else None
+    tries = [(v, ok, False, "with_number") for v, ok in variants(qn)] if qn != q else []
+    tries += [(v, ok, i == 0, "name" if i == 0 else ("spelling" if ok else "combo"))
+              for i, (v, ok) in enumerate(variants(q))]
+    if b2:
+        tries += [(v, ok, False, "brand_stripped") for v, ok in variants(nb)]
+    fallback = None                      # 판단불가는 다른 방법으로 더 찾아보고, 없을 때만 돌려준다
+    for v, exact_ok, contains, how in tries:
+        rows = search_local(v, contains=contains)
+        if not rows:
+            continue
+        if company:
+            rows.sort(key=lambda x: company not in g(x, "BSSH_NM"))
+        kind, picked = best(v, rows, keep=30)
+        if kind == "exact" and not exact_ok:
+            kind = "partial"
+        kind, picked = check_brand(kind, picked, company)
+        if kind == "partial" and len(norm(v)) < PARTIAL_MIN:
+            kind, picked = "none", []
+        if kind == "uncertain":
+            fallback = fallback or (kind, picked[:3], how)
+        elif kind != "none":
+            return kind, picked[:3], how
+    base = nb if b2 else q
+    if len(norm(base)) >= PARTIAL_MIN:     # 마지막: 붙여 쓴 이름을 앞·뒤로 나눠 찾기 (앞·뒤 모두 들어 있어야 함)
+        kind, picked = check_brand(*best_split(base, search_split(base)), company)
+        if kind != "none":
+            return kind, picked[:3], "split"
+    return fallback or ("none", [], "")
+
+
+# 순위표 대분류와 품목유형이 서로 맞지 않는 조합 — 이름이 같아도 다른 제품 ('new복분자'(주류) → 복분자제리(캔디류))
+SOLID_TYPES = ("캔디", "젤리", "과자", "빵", "초콜릿", "껌", "떡")
+
+
+def category_conflict(class2: str | None, item_type: str | None) -> bool:
+    c, t = class2 or "", item_type or ""
+    if not c or not t:
+        return False
+    if c == "주류":
+        return "주" not in t and "와인" not in t          # 과실주·약주·탁주·맥주·소주·리큐르…
+    if c in ("음료류", "차류"):
+        return any(x in t for x in SOLID_TYPES)
+    return False
+
+
+def check_category(kind: str, candidates: list[dict], class2: str | None) -> tuple[str, list[dict]]:
+    """대분류와 맞는 후보만 남긴다. 하나도 없으면 정확→판단불가, 유사→없음."""
+    if kind == "none" or not candidates:
+        return kind, candidates
+    ok = [c for c in candidates if not category_conflict(class2, c.get("item_type"))]
+    if ok:
+        return kind, ok
+    return ("uncertain", candidates) if kind == "exact" else ("none", [])
+
+
+def best(product: str, rows: list[dict], keep: int = 3) -> tuple[str, list[dict]]:
+    """정확히 같은 이름 > 이름이 포함 > 없음. 같은 수준이면 최대 keep 건(기본 3)을 '후보'로 남긴다."""
     p = norm(product)
     exact = [r for r in rows if norm(g(r, "PRDLST_NM")) == p]
     if exact:
-        return "exact", exact[:3]
+        return "exact", exact[:keep]
     part = [r for r in rows if p and (p in norm(g(r, "PRDLST_NM")) or norm(g(r, "PRDLST_NM")) in p)]
     part.sort(key=lambda r: abs(len(norm(g(r, "PRDLST_NM"))) - len(p)))
-    return ("partial", part[:3]) if part else ("none", [])
+    return ("partial", part[:keep]) if part else ("none", [])
 
 
 def summarize(r: dict) -> dict:
@@ -239,7 +322,13 @@ def main() -> int:
     if a.probe:
         try:
             q = query_name(a.probe)[0]
-            rows = search_local(q, 5) if (LOCAL_DB.exists() or HEALTH_DB.exists()) else search(key, q, 5)
+            if LOCAL_DB.exists() or HEALTH_DB.exists():
+                kind, rows, how = lookup_local(a.probe)
+                print(f"판정: {kind} ({how or '-'})")
+                for x in rows:
+                    print(" -", x.get("SOURCE"), "|", x["PRDLST_NM"], "|", x["BSSH_NM"])
+                return 0
+            rows = search(key, q, 5)
         except ServiceError as err:
             print(f"중단: {err}\n  식품안전나라 > 데이터활용서비스 > Open API 에서 '{SERVICE}' 활용신청(승인 반영) 후 다시 실행하세요.")
             return 3
@@ -265,30 +354,15 @@ def main() -> int:
             hit = cache.get(k)
             if not hit or hit.get("at", "") < fresh or hit.get("v") != CACHE_VER:
                 q, brand = query_name(prod)
+                how = ""
                 try:
-                    shortened = split = False
                     if LOCAL_DB.exists() or HEALTH_DB.exists():
-                        rows = []
-                        q0 = q
-                        nb, b2 = strip_brand(q)
-                        cands = variants(q) + (variants(nb) if b2 else [])
-                        for i, v in enumerate(cands):
-                            rows = search_local(v, contains=(i == 0))
-                            if rows:
-                                if b2 and v in variants(nb) and v not in variants(q0):
-                                    # 브랜드를 떼고 찾음: 제조사가 브랜드와 맞는 행만 남긴다
-                                    rows = [x for x in rows if BRAND_COMPANY[b2] in g(x, "BSSH_NM")] or rows
-                                    brand = brand or BRAND_COMPANY[b2]
-                                    shortened = v != variants(nb)[0] or not any(
-                                        BRAND_COMPANY[b2] in g(x, "BSSH_NM") for x in rows)
-                                else:
-                                    shortened = i >= 2   # 이름을 줄이거나 묶음을 나눠 찾은 것은 '유사'로만 본다
-                                q = v
-                                break
-                        if not rows:      # 마지막: 붙여 쓴 이름을 앞·뒤로 나눠 찾기
-                            rows, split = search_split(nb if b2 else q0), True
+                        kind, picked, how = lookup_local(prod)
                     else:
                         rows = search(key, q)
+                        if brand:   # 브랜드 표기가 있으면 제조사명에 그 글자가 든 행을 앞으로
+                            rows.sort(key=lambda x: brand not in g(x, "BSSH_NM"))
+                        kind, picked = best(q, rows)
                 except ServiceError as err:
                     # 권한·키 문제는 제품마다 같은 결과 → 캐시에 남기지 않고 바로 멈춘다
                     print(f"중단: {err}\n  식품안전나라 > 데이터활용서비스 > Open API 에서 '{SERVICE}' 활용신청 후 다시 실행하세요.")
@@ -300,18 +374,16 @@ def main() -> int:
                                 "product": prod, "match": "none", "candidates": []})
                     continue
                 calls += 0 if LOCAL_DB.exists() else 1
-                if brand:   # 브랜드 표기가 있으면 제조사명에 그 글자가 든 행을 앞으로
-                    rows.sort(key=lambda x: brand not in g(x, "BSSH_NM"))
-                kind, picked = best_split(q, rows) if split else best(q, rows)
-                if shortened and kind == "exact":
-                    kind = "partial"
                 hit = cache[k] = {"at": datetime.now().isoformat(timespec="seconds"), "v": CACHE_VER, "match": kind,
+                                  "how": how,
                                   "candidates": [summarize(x) for x in picked]}
                 if not LOCAL_DB.exists():
                     time.sleep(0.3)
             out.append({"yyyymm": r.get("yyyymm") or e.get("yyyymm"), "channel": e.get("channel"),
                         "class2": e.get("class2Nm"), "class3": e.get("class3Nm"), "rank": r.get("rank"),
-                        "product": prod, "match": hit["match"], "candidates": hit["candidates"]})
+                        "product": prod,
+                        **dict(zip(("match", "candidates"),
+                                   check_category(hit["match"], hit["candidates"], e.get("class2Nm"))))})
     CACHE.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
     day = src.parent.name
     d = OUT_DIR / day
@@ -331,12 +403,13 @@ def main() -> int:
         for o in out:
             c = (o["candidates"] or [{}])[0]
             w.writerow([o["yyyymm"], o["channel"], o["class2"], o["class3"], o["rank"], o["product"],
-                        {"exact": "일치", "partial": "유사(확인 필요)", "none": "없음"}[o["match"]],
+                        {"exact": "일치", "partial": "유사(확인 필요)", "uncertain": "판단불가(제조사 다름)", "none": "없음"}[o["match"]],
                         len(o["candidates"]), c.get("name", ""),
                         c.get("company", ""), c.get("item_type", ""), ", ".join(c.get("allergens", [])),
                         (c.get("raw") or "")[:80], c.get("source", "") if c else ""])
-    stat = {m: sum(1 for o in out if o["match"] == m) for m in ("exact", "partial", "none")}
-    print(f"저장: {d} (순위 {len(out)}건 — 일치 {stat['exact']}, 유사 {stat['partial']}, 없음 {stat['none']} / API 호출 {calls}회)")
+    stat = {m: sum(1 for o in out if o["match"] == m) for m in ("exact", "partial", "uncertain", "none")}
+    print(f"저장: {d} (순위 {len(out)}건 — 일치 {stat['exact']}, 유사 {stat['partial']}, "
+          f"판단불가 {stat['uncertain']}, 없음 {stat['none']} / API 호출 {calls}회)")
     return 0
 
 
