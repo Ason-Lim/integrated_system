@@ -207,6 +207,10 @@ def parse(text: str) -> Intent:
         slots["_expansion"] = exp
         log_unsupported(text, exp, source="rule_nlu")
 
+    if re.search(r"처음\s*(?:사|먹|주문|구매)|입문|맛보기|조금만|소량|1인|혼자", text):
+        slots["small_pack"] = True          # 처음 사거나 소량 → 대용량·묶음은 뒤로
+    if re.search(r"대량|업소용|식당용|도매|대용량|단체|박스\s*단위|넉넉히", text):
+        slots["bulk_ok"] = True             # 대량 구매 의도 → 묶음 상품도 그대로
     if EAT_CUES.search(text):
         slots["want_eat"] = True
     if PAIR_CUES.search(text):
