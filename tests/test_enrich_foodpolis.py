@@ -37,3 +37,9 @@ def test_query_name_strips_brand_prefix_and_pack_count():
 
 def test_service_errors_are_not_per_product():
     assert "INFO-110" in m.SERVICE_CODES and issubclass(m.ServiceError, RuntimeError)
+
+
+def test_variants_do_not_shrink_below_three_quarters():
+    v = m.variants("테이크핏초코")
+    assert "테이크핏" not in v and min(len(m.norm(x)) for x in v) >= 5
+    assert "박카스에프" in m.variants("박카스F")

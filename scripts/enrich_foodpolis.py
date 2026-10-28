@@ -26,6 +26,7 @@ from shared.food24_catalog import ALLERGEN_RULES, allergens_in  # noqa: E402
 RAW_DIR = ROOT / "data" / "foodpolis_raw"
 OUT_DIR = ROOT / "data" / "foodpolis_enriched"
 CACHE = OUT_DIR / "lookup_cache.json"
+LOCAL_DB = ROOT / "var" / "knowledge" / "c002_rawmtrl.sqlite"   # scripts/import_c002.py 로 만든 전체 C002
 SERVICE = "C002"
 CACHE_DAYS = 30
 
@@ -48,12 +49,36 @@ SERVICE_CODES = {"INFO-100", "INFO-110", "INFO-120", "INFO-300", "INFO-400", "ER
 def query_name(prod: str) -> tuple[str, str | None]:
     """'오리온)단백질바미니' → ('단백질바미니', '오리온'), '포스트*단백질바' → ('포스트 단백질바', None)"""
     brand = None
-    m = re.match(r"^\s*([^)\s]{1,6})\)\s*(.+)$", prod or "")
+    m = re.match(r"^\s*([^)/\s]{1,6})[)/]\s*(.+)$", prod or "")      # '정관장)홍삼원', '정관장/홍삼원'
     if m:
         brand, prod = m.group(1), m.group(2)
-    prod = re.sub(r"[*_+]", " ", prod)
-    prod = re.sub(r"\(\d+입\)|\d+(입|T|포|개)$", "", prod).strip()
+    prod = re.sub(r"[*_]", " ", prod)
+    prod = re.sub(r"\((?:\d+입|고소한맛|[^)]*맛)\)", "", prod)            # '(16입)', '(고소한맛)'
+    for _ in range(2):                                                    # 끝의 용량·포장 표기 (두 번까지)
+        prod = re.sub(r"\s*(\d+(?:\.\d+)?\s*(?:ml|m|l|g|kg|입|T|포|개|병|캔|팩|EA)?|케이스|박스|병|캔)$", "", prod,
+                      flags=re.I).strip()
     return prod, brand
+
+
+# 품목제조보고에 한글로 적힌 표기 (영문 약어 → 한글)
+SPELL = [("F", "에프"), ("ZERO", "제로"), ("Zero", "제로"), ("new", "뉴"), ("NEW", "뉴"), ("Big", "빅")]
+
+
+def variants(q: str) -> list[str]:
+    """검색 후보: 원래 이름 → 영문 약어를 한글로 → '+' 묶음은 첫 제품 → 끝에서 한 글자씩 줄이기(75%까지)"""
+    out = [q]
+    k = q
+    for a, b in SPELL:
+        k = re.sub(rf"(?<![A-Za-z]){a}(?![A-Za-z])", b, k)
+    out.append(k)
+    if "+" in q:
+        out.append(q.split("+")[0])
+    # 끝을 줄이는 건 원래 길이의 75%까지만 — 더 줄이면 맛·종류가 다른 제품이 잡힌다 ('테이크핏초코'→'딸기맛')
+    base = norm(out[-1])
+    floor = max(4, -(-len(base) * 3 // 4))
+    for n in range(len(base) - 1, floor - 1, -1):
+        out.append(base[:n])
+    return list(dict.fromkeys(x for x in out if x))
 
 
 def norm(s: str) -> str:
@@ -84,6 +109,32 @@ def search(key: str, name: str, n: int = 30) -> list[dict]:
         except Exception:  # noqa: BLE001
             time.sleep(1.5 * (i + 1))
     return []
+
+
+def search_local(name: str, n: int = 30, contains: bool = True) -> list[dict]:
+    """로컬 C002 DB에서 이름 검색 (정확히 같은 이름 → 이름 포함 순). API와 같은 필드명으로 돌려준다."""
+    import sqlite3
+    key = norm(name)
+    if len(key) < 2:
+        return []
+    con = sqlite3.connect(f"file:{LOCAL_DB}?mode=ro", uri=True)
+    con.execute("pragma case_sensitive_like = on")      # 'x%' 앞부분 일치에 색인(ix_name_norm)을 쓰게 한다
+    try:
+        rows = con.execute("select name, company, report_no, item_type, raw from product where name_norm = ? limit ?",
+                           (key, n)).fetchall()
+        like = key.replace("%", "").replace("_", "")
+        if len(rows) < n:     # 앞부분 일치 (색인 사용, 빠름)
+            rows += con.execute("select name, company, report_no, item_type, raw from product "
+                                "where name_norm like ? and name_norm != ? order by length(name_norm) limit ?",
+                                (f"{like}%", key, n - len(rows))).fetchall()
+        if contains and not rows:   # 중간 포함 (전체 훑기, 느림 — 원래 이름에만)
+            rows += con.execute("select name, company, report_no, item_type, raw from product "
+                                "where name_norm like ? order by length(name_norm) limit ?",
+                                (f"%{like}%", n)).fetchall()
+    finally:
+        con.close()
+    return [{"PRDLST_NM": a, "BSSH_NM": b, "PRDLST_REPORT_NO": c, "PRDLST_DCNM": d, "RAWMTRL_NM": e}
+            for a, b, c, d, e in rows]
 
 
 def best(product: str, rows: list[dict]) -> tuple[str, list[dict]]:
@@ -119,12 +170,13 @@ def main() -> int:
     ap.add_argument("--probe", help="제품명 하나로 C002 응답 구조 확인")
     a = ap.parse_args()
     key = env("FOODSAFETY_API_KEY")
-    if not key:
-        print(".env 에 FOODSAFETY_API_KEY 가 없습니다.")
+    if not key and not LOCAL_DB.exists():
+        print("로컬 C002 DB(scripts/import_c002.py)도, .env 의 FOODSAFETY_API_KEY 도 없습니다.")
         return 2
     if a.probe:
         try:
-            rows = search(key, query_name(a.probe)[0], 5)
+            q = query_name(a.probe)[0]
+            rows = search_local(q, 5) if LOCAL_DB.exists() else search(key, q, 5)
         except ServiceError as err:
             print(f"중단: {err}\n  식품안전나라 > 데이터활용서비스 > Open API 에서 '{SERVICE}' 활용신청(승인 반영) 후 다시 실행하세요.")
             return 3
@@ -151,7 +203,16 @@ def main() -> int:
             if not hit or hit.get("at", "") < fresh:
                 q, brand = query_name(prod)
                 try:
-                    rows = search(key, q)
+                    shortened = False
+                    if LOCAL_DB.exists():
+                        rows = []
+                        for i, v in enumerate(variants(q)):
+                            rows = search_local(v, contains=(i == 0))
+                            if rows:
+                                q, shortened = v, i >= 2    # 이름을 줄이거나 묶음을 나눠 찾은 것은 '유사'로만 본다
+                                break
+                    else:
+                        rows = search(key, q)
                 except ServiceError as err:
                     # 권한·키 문제는 제품마다 같은 결과 → 캐시에 남기지 않고 바로 멈춘다
                     print(f"중단: {err}\n  식품안전나라 > 데이터활용서비스 > Open API 에서 '{SERVICE}' 활용신청 후 다시 실행하세요.")
@@ -162,13 +223,16 @@ def main() -> int:
                                 "class2": e.get("class2Nm"), "class3": e.get("class3Nm"), "rank": r.get("rank"),
                                 "product": prod, "match": "none", "candidates": []})
                     continue
-                calls += 1
+                calls += 0 if LOCAL_DB.exists() else 1
                 if brand:   # 브랜드 표기가 있으면 제조사명에 그 글자가 든 행을 앞으로
                     rows.sort(key=lambda x: brand not in g(x, "BSSH_NM"))
                 kind, picked = best(q, rows)
+                if shortened and kind == "exact":
+                    kind = "partial"
                 hit = cache[k] = {"at": datetime.now().isoformat(timespec="seconds"), "match": kind,
                                   "candidates": [summarize(x) for x in picked]}
-                time.sleep(0.3)
+                if not LOCAL_DB.exists():
+                    time.sleep(0.3)
             out.append({"yyyymm": r.get("yyyymm") or e.get("yyyymm"), "channel": e.get("channel"),
                         "class2": e.get("class2Nm"), "class3": e.get("class3Nm"), "rank": r.get("rank"),
                         "product": prod, "match": hit["match"], "candidates": hit["candidates"]})
@@ -177,17 +241,21 @@ def main() -> int:
     d = OUT_DIR / day
     d.mkdir(parents=True, exist_ok=True)
     doc = {"reference_only": True,
-           "note": "내부 참고 자료 — 화면·추천·블로그·외부 게시 금지 (식품정보24 이용약관, 원자료 NICE 지니데이터)",
-           "source_rankings": str(src.relative_to(ROOT)), "enriched_with": "식품안전나라 C002 품목제조보고(원재료)",
+           "note": "내부 참고 자료 — 화면·추천·블로그·외부 게시 금지 (식품정보24 이용약관, 원자료 NICE 지니데이터). "
+                   "C002 원재료는 일부만 공개(복합원재료는 '음료베이스' 등으로 표기)되므로 알레르기 '없음'은 판단할 수 없음.",
+           "source_rankings": str(src.relative_to(ROOT)),
+           "enriched_with": "식품안전나라 C002 품목제조보고(원재료)" + (" — 로컬 전체 파일" if LOCAL_DB.exists() else " — Open API"),
            "generated_at": datetime.now().isoformat(timespec="seconds"), "rows": out}
     (d / "rankings_enriched.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     with open(d / "rankings_enriched.csv", "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["기준월", "채널", "중분류", "소분류", "순위", "제품명", "매칭", "제조사", "품목유형", "알레르기(원재료 기준)", "원재료(앞부분)"])
+        w.writerow(["기준월", "채널", "중분류", "소분류", "순위", "제품명", "매칭", "후보 수", "품목명(품목제조보고)", "제조사",
+                    "품목유형", "알레르기(공개 원재료에서 확인된 것만)", "원재료(앞부분)"])
         for o in out:
             c = (o["candidates"] or [{}])[0]
             w.writerow([o["yyyymm"], o["channel"], o["class2"], o["class3"], o["rank"], o["product"],
                         {"exact": "일치", "partial": "유사(확인 필요)", "none": "없음"}[o["match"]],
+                        len(o["candidates"]), c.get("name", ""),
                         c.get("company", ""), c.get("item_type", ""), ", ".join(c.get("allergens", [])),
                         (c.get("raw") or "")[:80]])
     stat = {m: sum(1 for o in out if o["match"] == m) for m in ("exact", "partial", "none")}

@@ -102,13 +102,9 @@ class Recommender:
                 x.decision["status"] = "NOT_RANKABLE"
                 x.decision["missing"].append("allergen_source_verification")
                 x.decision["next_evidence"].append("allergen_source_verification")
-                rec = getattr(x, "food24", None)
-                if rec and rec.get("company_matched"):
-                    label = food24_catalog.ALLERGEN_RULES[allergen]["label"]
-                    x.evidence.append(f"원재료에 {label} 표기 없음 (식약처 품목제조보고)")
-                    x.unverified.append("같은 시설 제조(교차오염) 표시")
-                else:
-                    x.unverified.append("알레르기 성분·교차오염 원문 확인")
+                # 품목제조보고 원재료는 일부만 공개(복합원재료는 '음료베이스' 등)되므로 '없음'은 근거가 될 수 없다.
+                # 성분이 확인된 상품만 위에서 제외하고, 나머지는 모두 원문 확인 필요로 둔다.
+                x.unverified.append("알레르기 성분·교차오염 원문 확인")
             if x.decision["status"] != "RANKABLE":
                 x.rankable = False
                 x.not_rankable_reason = x.not_rankable_reason or "구매조건 근거 부족"

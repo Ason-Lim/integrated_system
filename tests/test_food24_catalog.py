@@ -81,5 +81,6 @@ def test_recommender_excludes_products_with_allergen_in_raw(db):
     titles = [x.offer.title for x in items]
     assert "롯데 칙촉 오리지널 과자" not in titles   # 제조사 미확인이어도 원재료에 땅콩 → 제외 and rec.last_allergen_excluded == 1
     ssal = next(x for x in items if "쌀과자" in x.offer.title)
-    assert any("견과류·땅콩 표기 없음" in e for e in ssal.evidence)
-    assert "같은 시설 제조(교차오염) 표시" in ssal.unverified
+    # 원재료가 일부만 공개되므로 '없음'을 근거로 내세우지 않는다
+    assert not any("표기 없음" in e for e in ssal.evidence)
+    assert "알레르기 성분·교차오염 원문 확인" in ssal.unverified
