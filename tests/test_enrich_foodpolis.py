@@ -125,3 +125,9 @@ def test_category_conflict():
     assert m.check_category("partial", [jelly], "주류") == ("none", [])            # new복분자 → 복분자제리
     assert m.check_category("exact", [jelly], "음료류")[0] == "uncertain"           # 비타병 → 캔디류
     assert m.check_category("partial", [{"item_type": "과실주"}], "주류")[0] == "partial"
+
+
+def test_check_brand_drops_mismatched_candidates():
+    rows = [row("홍삼원", "(주)상일"), row("홍삼원", "(주)한국인삼공사"), row("홍삼원", "고려홍삼원(주)")]
+    kind, picked = m.check_brand("exact", rows, "한국인삼공사")
+    assert kind == "exact" and [r["BSSH_NM"] for r in picked] == ["(주)한국인삼공사"]

@@ -97,7 +97,8 @@ def _public_info(title: str) -> dict | None:
         rec = food24_catalog.match(title)
     except Exception:
         return None
-    return food24_catalog.public_info(rec) if rec and rec.get("company_matched") else None
+    # 자동 표시는 제조사 확인 + 같은 제조사에 겹치는 신고 없음(display_ok)일 때만 (2026-10-28 실제 상품명 평가)
+    return food24_catalog.public_info(rec) if rec and rec.get("display_ok") else None
 
 
 def _follow_up_chips(so: ScoredOffer) -> list[dict]:

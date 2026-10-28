@@ -85,7 +85,7 @@ class Recommender:
         ranked = [x for x in ranked if not x.offer.is_sponsored]
         allergen = intent.slots.get("allergen")
         self.last_allergen_excluded = 0
-        if allergen and food24_catalog.available():
+        if allergen and food24_catalog.allergen_filter_enabled():   # 매칭 표시와 별도 스위치 (기본 꺼짐)
             # 식약처 품목제조보고 원재료에 해당 알레르기 성분이 있는 상품은 후보에서 뺀다 (보수적: 이름만 맞아도 제외)
             keep = []
             for x in ranked:

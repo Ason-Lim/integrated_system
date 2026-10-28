@@ -215,7 +215,7 @@ def check_brand(kind: str, picked: list[dict], company: str | None) -> tuple[str
         return kind, picked
     hit = [r for r in picked if company in g(r, "BSSH_NM")]
     if hit:
-        return kind, hit + [r for r in picked if r not in hit]
+        return kind, hit                  # 제조사가 맞는 후보가 있으면 맞지 않는 후보는 뺀다
     return ("uncertain", picked) if kind == "exact" else ("none", [])
 
 

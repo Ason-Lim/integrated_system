@@ -17,3 +17,6 @@ data/source/
 
 # 인증키가 평문으로 든 로컬 점검 파일 (2026-10-28)
 test_foodpolis.py
+# 평가 출력·사람 검토 결과 (판매처 상품명 포함 — 저장소에 올리지 않음)
+var/tmp/
+var/review/
